@@ -23,6 +23,5 @@
     "app/api/admin/backup/upload/route.ts": {
       "maxDuration": 60
     }
-  },
-  //"ignoreCommand": "echo 'Ignoring backups folder'"
+  }
 }

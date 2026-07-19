@@ -91,7 +91,7 @@ async function handleSocialLogin(
           name: name || `${provider} User`,
           role: "PLAYER",
           emailVerified: true,
-          isVerified: false,
+          isVerified: true,
           emailNotificationsEnabled: true,
         },
         select: {
@@ -171,9 +171,8 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       httpOptions: {
-        timeout: 30000, // ✅ Increased from 15000 to 30000 (30 seconds)
+        timeout: 30000,
       },
-      // ✅ Add this to fix timeout issues
       authorization: {
         params: {
           prompt: "consent",
@@ -196,7 +195,7 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.FACEBOOK_CLIENT_ID || "",
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET || "",
       httpOptions: {
-        timeout: 30000, // ✅ Increased from 15000 to 30000
+        timeout: 30000,
       },
       profile(profile) {
         return {
@@ -345,7 +344,10 @@ export const authOptions: NextAuthOptions = {
     updateAge: 24 * 60 * 60,
   },
 
-  // ✅ Add more robust cookie settings
+  // ✅ CRITICAL FIX: Use secure cookies settings
+  useSecureCookies: process.env.NODE_ENV === "production",
+  
+  // ✅ Add cookie configuration
   cookies: {
     sessionToken: {
       name: process.env.NODE_ENV === "production"
@@ -358,13 +360,54 @@ export const authOptions: NextAuthOptions = {
         secure: process.env.NODE_ENV === "production",
       },
     },
+    callbackUrl: {
+      name: process.env.NODE_ENV === "production"
+        ? "__Secure-next-auth.callback-url"
+        : "next-auth.callback-url",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    csrfToken: {
+      name: process.env.NODE_ENV === "production"
+        ? "__Host-next-auth.csrf-token"
+        : "next-auth.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    pkceCodeVerifier: {
+      name: process.env.NODE_ENV === "production"
+        ? "__Secure-next-auth.pkce.code_verifier"
+        : "next-auth.pkce.code_verifier",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    state: {
+      name: process.env.NODE_ENV === "production"
+        ? "__Host-next-auth.state"
+        : "next-auth.state",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
   },
 
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
-  
-  // ✅ Use secure cookies in production
-  useSecureCookies: process.env.NODE_ENV === "production",
 }
 
 // ============================================ //
