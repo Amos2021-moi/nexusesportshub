@@ -28,6 +28,7 @@ import {
   Activity,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 // UI Components
@@ -320,7 +321,8 @@ DecorBackground.displayName = "DecorBackground";
 /* -------------------------------------------------------------------------- */
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [playerEntry, setPlayerEntry] = useState<PlayerEntry | null>(null);
@@ -330,11 +332,18 @@ export default function DashboardPage() {
 
   const isAdmin = session?.user?.role === "ADMIN";
 
+  // ✅ Redirect admin users to admin dashboard
+  useEffect(() => {
+    if (status === "authenticated" && isAdmin) {
+      router.replace("/admin");
+    }
+  }, [status, isAdmin, router]);
+
   useEffect(() => {
     setGreeting(getGreeting());
   }, []);
 
-  // ✅ Fetch dashboard data
+  // ✅ Fetch dashboard data (only for non-admin users)
   const {
     data: dashboardData,
     refetch: refetchDashboard,
@@ -479,24 +488,9 @@ export default function DashboardPage() {
   const nextOpponentId = dashboardData?.nextFixture?.opponentId || null;
   const nextOpponentName = dashboardData?.nextFixture?.opponent || null;
 
-  // ⚠️ If admin, redirect (or show admin dashboard)
+  // ✅ If admin, redirect (don't render anything)
   if (isAdmin) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950">
-        <div className="text-center">
-          <Shield className="h-12 w-12 text-indigo-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-white">Admin Dashboard</h1>
-          <p className="text-gray-400 mt-2">Redirecting to admin panel...</p>
-          <Link
-            href="/admin"
-            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700"
-          >
-            Go to Admin Dashboard
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </div>
-    );
+    return null; // The useEffect will redirect
   }
 
   // Loading state
