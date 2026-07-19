@@ -4,7 +4,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Trophy,
   Users,
@@ -24,14 +24,8 @@ import {
   MessageCircle,
   BarChart3,
   Zap,
-  Star,
-  Medal,
   Crown,
   Activity,
-  Flame,
-  Gem,
-  Rocket,
-  Coins,
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -77,7 +71,6 @@ interface DashboardData {
     result: string;
   } | null;
   recentForm?: string[];
-  // ✅ Additional fields from combined endpoint
   seasonProgress?: {
     percentage: number;
     matchesPlayed: number;
@@ -172,7 +165,6 @@ interface StatCardProps {
     icon: React.ElementType;
     color: string;
     change: string;
-    borderColor?: string;
   };
 }
 
@@ -183,10 +175,10 @@ const StatCard = memo(({ stat }: StatCardProps) => {
       initial={{ opacity: 0, scale: 0.94, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      whileHover={{ 
-        y: -5, 
+      whileHover={{
+        y: -5,
         scale: 1.025,
-        transition: { type: "spring", stiffness: 350, damping: 22 }
+        transition: { type: "spring", stiffness: 350, damping: 22 },
       }}
       className="will-change-transform h-full"
     >
@@ -209,9 +201,7 @@ const StatCard = memo(({ stat }: StatCardProps) => {
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 sm:text-sm">
             {stat.name}
           </p>
-          <p className="text-[11px] font-medium text-gray-400 sm:text-xs">
-            {stat.change}
-          </p>
+          <p className="text-[11px] font-medium text-gray-400 sm:text-xs">{stat.change}</p>
         </div>
       </div>
     </motion.div>
@@ -255,7 +245,10 @@ const GoalStat = memo(({ icon: Icon, label, value, color, borderColor }: GoalSta
 GoalStat.displayName = "GoalStat";
 
 const FormBadge = memo(({ result }: { result: string }) => {
-  const configs: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  const configs: Record<
+    string,
+    { color: string; bg: string; border: string; label: string }
+  > = {
     W: {
       color: "text-emerald-300",
       bg: "bg-emerald-500/20",
@@ -341,32 +334,31 @@ export default function DashboardPage() {
     setGreeting(getGreeting());
   }, []);
 
-  // ✅ OPTIMIZED: Single query that fetches ALL dashboard data from combined endpoint
-  const { data: dashboardData, refetch: refetchDashboard, isLoading } = useQuery<DashboardData>({
+  // ✅ Fetch dashboard data
+  const {
+    data: dashboardData,
+    refetch: refetchDashboard,
+    isLoading,
+  } = useQuery<DashboardData>({
     queryKey: ["dashboard-all-data"],
     queryFn: async () => {
       const start = performance.now();
-      
-      // ✅ Fetch all data from the combined endpoint
       const res = await fetch("/api/dashboard/all", { credentials: "include" });
       if (!res.ok) {
         throw new Error("Failed to fetch dashboard data");
       }
-      
       const data = await res.json();
-      
       const duration = performance.now() - start;
-      console.log(`📊 All dashboard data fetched in ${duration.toFixed(0)}ms`);
-      
+      console.log(`📊 Dashboard data fetched in ${duration.toFixed(0)}ms`);
       return data;
     },
-    staleTime: 30000, // 30 seconds
+    staleTime: 30000,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
-    enabled: !!session,
+    enabled: !!session && !isAdmin,
   });
 
-  // ✅ Separate query for player entry (needed for payment modal)
+  // ✅ Fetch player entry
   const { data: entryData, refetch: refetchEntry } = useQuery<PlayerEntry | null>({
     queryKey: ["player-entry"],
     queryFn: async () => {
@@ -465,7 +457,9 @@ export default function DashboardPage() {
     if (dashboardData?.currentRank && dashboardData?.totalPlayers && dashboardData.totalPlayers > 0) {
       return Math.max(
         5,
-        Math.round(((dashboardData.totalPlayers - dashboardData.currentRank + 1) / dashboardData.totalPlayers) * 100)
+        Math.round(
+          ((dashboardData.totalPlayers - dashboardData.currentRank + 1) / dashboardData.totalPlayers) * 100
+        )
       );
     }
     return 0;
@@ -484,6 +478,26 @@ export default function DashboardPage() {
 
   const nextOpponentId = dashboardData?.nextFixture?.opponentId || null;
   const nextOpponentName = dashboardData?.nextFixture?.opponent || null;
+
+  // ⚠️ If admin, redirect (or show admin dashboard)
+  if (isAdmin) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-950">
+        <div className="text-center">
+          <Shield className="h-12 w-12 text-indigo-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white">Admin Dashboard</h1>
+          <p className="text-gray-400 mt-2">Redirecting to admin panel...</p>
+          <Link
+            href="/admin"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-white hover:bg-indigo-700"
+          >
+            Go to Admin Dashboard
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Loading state
   if (loading || isLoading) {
@@ -537,14 +551,12 @@ export default function DashboardPage() {
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                 <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-4xl">
-                  {isAdmin
-                    ? `Welcome Admin, ${session?.user?.name || "Admin"}! 👋`
-                    : `${greeting}, ${session?.user?.name || "Player"}! 👋`}
+                  {`${greeting}, ${session?.user?.name || "Player"}! 👋`}
                 </h1>
                 <span className="inline-flex items-center rounded-full border border-indigo-400/30 bg-indigo-500/20 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-indigo-300 shadow-sm sm:text-xs">
-                  {isAdmin ? "LEAGUE ADMIN" : "NEXUS COMPETING PLAYER"}
+                  NEXUS COMPETING PLAYER
                 </span>
-                {!isAdmin && playerEntry?.hasPaid && (
+                {playerEntry?.hasPaid && (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-emerald-300 shadow-sm sm:text-xs">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
                     ACTIVE SEASON
@@ -552,15 +564,13 @@ export default function DashboardPage() {
                 )}
               </div>
               <p className="text-sm font-medium text-gray-300 sm:text-base">
-                {isAdmin
-                  ? "Manage the Nexus Esports League, view live match metrics, and oversee player progression."
-                  : playerEntry?.hasPaid
+                {playerEntry?.hasPaid
                   ? "You're primed for battle! Review your upcoming fixtures and track your competitive streak below."
                   : "Complete your season entry to activate official league matches and unlock prize pools!"}
               </p>
               <div className="pt-1 flex flex-wrap items-center gap-3 sm:gap-4">
                 <TrustBadge type="last-active" />
-                {!isAdmin && playerEntry?.hasPaid && (
+                {playerEntry?.hasPaid && (
                   <span className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-1 text-xs font-semibold text-emerald-400 ring-1 ring-white/10">
                     <Shield className="h-3.5 w-3.5 text-emerald-400" />
                     Verified Nexus Athlete
@@ -584,39 +594,35 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        // app/dashboard/page.tsx - Around line 585-600
+        {/* Payment Modal */}
+        <PaymentModal
+          isOpen={showPaymentModal}
+          seasonId={entryData?.seasonId || ""}
+          entryFee={entryData?.entryFee || 0}
+          seasonName={entryData?.seasonName || "Season"}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={handlePaymentSuccess}
+        />
 
-{/* Payment Modal */}
-<PaymentModal
-  isOpen={showPaymentModal}
-  seasonId={entryData?.seasonId || ""}
-  entryFee={entryData?.entryFee || 0}
-  seasonName={entryData?.seasonName || "Season"}
-  onClose={() => setShowPaymentModal(false)}
-  onSuccess={handlePaymentSuccess}
-/>
-
-// app/dashboard/page.tsx - Fix StatusCard props
-
-{/* Status Card */}
-{!isAdmin && playerEntry?.hasEntry && (
-  <motion.div
-    initial={{ opacity: 0, y: 18 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.45, ease: "easeOut" }}
-  >
-    <StatusCard
-      seasonId={playerEntry.seasonId || ""}
-      seasonName={playerEntry.seasonName || ""}
-      paymentRequired={playerEntry.paymentRequired}
-      entryFee={playerEntry.entryFee}
-      hasPaid={playerEntry.hasPaid}
-      status={playerEntry.status}
-      userId={session?.user?.id || ""}
-      onPaymentSuccess={handlePaymentSuccess}
-    />
-  </motion.div>
-)}
+        {/* Status Card */}
+        {playerEntry?.hasEntry && (
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+          >
+            <StatusCard
+              seasonId={playerEntry.seasonId || ""}
+              seasonName={playerEntry.seasonName || ""}
+              paymentRequired={playerEntry.paymentRequired}
+              entryFee={playerEntry.entryFee}
+              hasPaid={playerEntry.hasPaid}
+              status={playerEntry.status}
+              userId={session?.user?.id || ""}
+              onPaymentSuccess={handlePaymentSuccess}
+            />
+          </motion.div>
+        )}
 
         {/* Prize Display */}
         {shouldShowPrize && (
@@ -684,7 +690,7 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* ===================================================================== */}
-        {/* 4 & 5. Unified 2x2 Grid (Next Fixture | Recent Result & Table | Activity) */}
+        {/* 4 & 5. Unified 2x2 Grid                                               */}
         {/* ===================================================================== */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           {/* Top Left: Next Fixture */}
@@ -736,13 +742,16 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <p className="mt-3 text-xs font-medium text-gray-400 sm:text-sm">
-                  {new Date(dashboardData.nextFixture.date).toLocaleDateString(undefined, {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {new Date(dashboardData.nextFixture.date).toLocaleDateString(
+                    undefined,
+                    {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }
+                  )}
                 </p>
                 <div className="mt-5 w-full sm:w-auto">
                   <Link
@@ -871,7 +880,9 @@ export default function DashboardPage() {
                         #1
                       </span>
                       <div>
-                        <p className="text-sm font-bold text-white">vs {dashboardData.recentResult.opponent}</p>
+                        <p className="text-sm font-bold text-white">
+                          vs {dashboardData.recentResult.opponent}
+                        </p>
                         <p className="text-[11px] text-gray-400">Official League Match</p>
                       </div>
                     </div>
@@ -1016,7 +1027,11 @@ export default function DashboardPage() {
                     #{dashboardData?.currentRank || "-"}
                   </p>
                   <p className="mt-0.5 text-xs font-medium text-gray-400 sm:text-sm">
-                    Competing among <span className="font-semibold text-white">{dashboardData?.totalPlayers ?? 0}</span> registered players
+                    Competing among{" "}
+                    <span className="font-semibold text-white">
+                      {dashboardData?.totalPlayers ?? 0}
+                    </span>{" "}
+                    registered players
                   </p>
                 </div>
               </div>
@@ -1052,16 +1067,28 @@ export default function DashboardPage() {
             {/* Quick Stat Pills */}
             <div className="mt-6 grid grid-cols-3 gap-3 text-center sm:gap-4">
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 transition-colors hover:border-emerald-500/30 hover:bg-emerald-500/10">
-                <p className="text-lg font-black text-emerald-400 sm:text-2xl">{dashboardData?.wins ?? 0}</p>
-                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Victories</p>
+                <p className="text-lg font-black text-emerald-400 sm:text-2xl">
+                  {dashboardData?.wins ?? 0}
+                </p>
+                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                  Victories
+                </p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 transition-colors hover:border-amber-500/30 hover:bg-amber-500/10">
-                <p className="text-lg font-black text-amber-400 sm:text-2xl">{dashboardData?.draws ?? 0}</p>
-                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Draws</p>
+                <p className="text-lg font-black text-amber-400 sm:text-2xl">
+                  {dashboardData?.draws ?? 0}
+                </p>
+                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                  Draws
+                </p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 transition-colors hover:border-rose-500/30 hover:bg-rose-500/10">
-                <p className="text-lg font-black text-rose-400 sm:text-2xl">{dashboardData?.losses ?? 0}</p>
-                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Losses</p>
+                <p className="text-lg font-black text-rose-400 sm:text-2xl">
+                  {dashboardData?.losses ?? 0}
+                </p>
+                <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                  Losses
+                </p>
               </div>
             </div>
           </div>
