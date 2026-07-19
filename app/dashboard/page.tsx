@@ -584,38 +584,39 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Payment Modal */}
-        {showPaymentModal && entryData?.seasonId && (
-          <PaymentModal
-            seasonId={entryData.seasonId}
-            entryFee={entryData.entryFee || 0}
-            seasonName={entryData.seasonName || "Season"}
-            userEmail={session?.user?.email}
-            userName={session?.user?.name}
-            onClose={() => setShowPaymentModal(false)}
-            onSuccess={handlePaymentSuccess}
-          />
-        )}
+        // app/dashboard/page.tsx - Around line 585-600
 
-        {/* Status Card */}
-        {!isAdmin && playerEntry?.hasEntry && (
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
-          >
-            <StatusCard
-              seasonId={playerEntry.seasonId}
-              seasonName={playerEntry.seasonName}
-              paymentRequired={playerEntry.paymentRequired}
-              entryFee={playerEntry.entryFee}
-              hasPaid={playerEntry.hasPaid}
-              status={playerEntry.status}
-              userId={session?.user?.id || ""}
-              onPaymentSuccess={handlePaymentSuccess}
-            />
-          </motion.div>
-        )}
+{/* Payment Modal */}
+<PaymentModal
+  isOpen={showPaymentModal}
+  seasonId={entryData?.seasonId || ""}
+  entryFee={entryData?.entryFee || 0}
+  seasonName={entryData?.seasonName || "Season"}
+  onClose={() => setShowPaymentModal(false)}
+  onSuccess={handlePaymentSuccess}
+/>
+
+// app/dashboard/page.tsx - Fix StatusCard props
+
+{/* Status Card */}
+{!isAdmin && playerEntry?.hasEntry && (
+  <motion.div
+    initial={{ opacity: 0, y: 18 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.45, ease: "easeOut" }}
+  >
+    <StatusCard
+      seasonId={playerEntry.seasonId || ""}
+      seasonName={playerEntry.seasonName || ""}
+      paymentRequired={playerEntry.paymentRequired}
+      entryFee={playerEntry.entryFee}
+      hasPaid={playerEntry.hasPaid}
+      status={playerEntry.status}
+      userId={session?.user?.id || ""}
+      onPaymentSuccess={handlePaymentSuccess}
+    />
+  </motion.div>
+)}
 
         {/* Prize Display */}
         {shouldShowPrize && (

@@ -7,7 +7,6 @@ import { CompetitionStatus } from "@prisma/client"
 
 // ✅ Helper to check if player has paid - OPTIMIZED with single query
 async function hasPlayerPaid(userId: string, seasonId: string): Promise<boolean> {
-  // ✅ Single query with OR condition instead of two separate queries
   const entry = await prisma.$queryRaw<{ paid: boolean }[]>`
     SELECT EXISTS (
       SELECT 1 FROM "PlayerSeasonEntry" 
@@ -24,7 +23,6 @@ async function hasPlayerPaid(userId: string, seasonId: string): Promise<boolean>
 async function getPaidPlayerIds(seasonId: string): Promise<Set<string>> {
   const paidIds = new Set<string>()
   
-  // ✅ Single query using UNION
   const results = await prisma.$queryRaw<{ userId: string }[]>`
     SELECT "userId" FROM "PlayerSeasonEntry" 
     WHERE "seasonId" = ${seasonId} AND "hasPaid" = true
@@ -40,31 +38,53 @@ async function getPaidPlayerIds(seasonId: string): Promise<Set<string>> {
 // ✅ Cache dashboard stats per user with shorter cache time
 const getCachedDashboardStats = unstable_cache(
   async (userId: string) => {
-    // ✅ BATCH: Get all data in parallel with optimized queries
-    const [activeSeason, profile, leagueEntries, fixtures, recentResult] = await Promise.all([
-      // 1. Get active season - optimized select
-      prisma.season.findFirst({
-        where: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          leagueSettings: {
-            select: {
-              paymentRequired: true,
-            },
+    // ✅ First get active season
+    const activeSeason = await prisma.season.findFirst({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        leagueSettings: {
+          select: {
+            paymentRequired: true,
           },
         },
-      }),
-      
-      // 2. Get profile (minimal data)
+      },
+    })
+
+    // ✅ Early return if no active season
+    if (!activeSeason) {
+      return {
+        matchesPlayed: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        winRate: 0,
+        currentRank: 0,
+        totalPlayers: 0,
+        points: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+        nextFixture: null,
+        recentResult: null,
+        paymentRequired: false,
+        isPaid: true,
+        showFixtures: true,
+      }
+    }
+
+    // ✅ Then fetch all data in parallel using the activeSeason id
+    const [profile, leagueEntries, fixtures, recentResult] = await Promise.all([
+      // 1. Get profile
       prisma.profile.findUnique({
         where: { userId },
         select: { username: true },
       }),
       
-      // 3. Get league entries - with player data included
+      // 2. Get league entries
       prisma.leagueEntry.findMany({
-        where: activeSeason ? { seasonId: activeSeason.id } : undefined,
+        where: { seasonId: activeSeason.id },
         select: {
           id: true,
           playerId: true,
@@ -95,8 +115,8 @@ const getCachedDashboardStats = unstable_cache(
         ],
       }),
       
-      // 4. Get next fixture - OPTIMIZED with direct query
-      activeSeason ? prisma.fixture.findFirst({
+      // 3. Get next fixture
+      prisma.fixture.findFirst({
         where: {
           seasonId: activeSeason.id,
           OR: [
@@ -134,10 +154,10 @@ const getCachedDashboardStats = unstable_cache(
           },
         },
         orderBy: { scheduledDate: 'asc' }
-      }) : Promise.resolve(null),
+      }),
       
-      // 5. Get recent result - OPTIMIZED with direct query
-      activeSeason ? prisma.result.findFirst({
+      // 4. Get recent result
+      prisma.result.findFirst({
         where: {
           source: "LEAGUE",
           approved: true,
@@ -181,46 +201,22 @@ const getCachedDashboardStats = unstable_cache(
           },
         },
         orderBy: { createdAt: 'desc' }
-      }) : Promise.resolve(null),
+      }),
     ])
-
-    // ✅ Early return if no active season
-    if (!activeSeason) {
-      return {
-        matchesPlayed: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        winRate: 0,
-        currentRank: 0,
-        totalPlayers: 0,
-        points: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        goalDifference: 0,
-        nextFixture: null,
-        recentResult: null,
-        paymentRequired: false,
-        isPaid: true,
-        showFixtures: true,
-      }
-    }
 
     const paymentRequired = activeSeason.leagueSettings?.paymentRequired || false
     let isPaid = true
     let showFixtures = true
     let filteredEntries = leagueEntries
 
-    // ✅ Handle payment filtering - OPTIMIZED
+    // ✅ Handle payment filtering
     if (paymentRequired) {
       isPaid = await hasPlayerPaid(userId, activeSeason.id)
       
       if (!isPaid) {
         showFixtures = false
-        // ✅ Only keep the user's entry for rank calculation
         filteredEntries = leagueEntries.filter(e => e.playerId === userId)
       } else {
-        // ✅ Get all paid player IDs in one query
         const paidIds = await getPaidPlayerIds(activeSeason.id)
         filteredEntries = leagueEntries.filter(e => paidIds.has(e.playerId))
       }
@@ -258,7 +254,7 @@ const getCachedDashboardStats = unstable_cache(
 
     // ✅ Process recent result
     let recentResultData = null
-    if (showFixtures && recentResult) {
+    if (showFixtures && recentResult && recentResult.fixture) {
       const isHome = recentResult.fixture.homePlayerId === userId
       const opponent = isHome
         ? (recentResult.fixture.awayPlayer.profile?.username || recentResult.fixture.awayPlayer.name)
@@ -294,7 +290,7 @@ const getCachedDashboardStats = unstable_cache(
     }
   },
   ['dashboard-stats'],
-  { revalidate: 15 } // ✅ Reduced from 30 to 15 seconds for fresher data
+  { revalidate: 15 }
 )
 
 export async function GET() {
@@ -309,7 +305,6 @@ export async function GET() {
     const data = await getCachedDashboardStats(session.user.id)
     const duration = performance.now() - startTime
     
-    // ✅ Log performance
     if (duration > 100) {
       console.log(`📊 Dashboard stats fetched in ${duration.toFixed(0)}ms`)
     }
@@ -317,7 +312,6 @@ export async function GET() {
     return NextResponse.json(data)
   } catch (error) {
     console.error("Error fetching dashboard stats:", error)
-    // ✅ Return cached fallback if available
     return NextResponse.json({
       matchesPlayed: 0,
       wins: 0,

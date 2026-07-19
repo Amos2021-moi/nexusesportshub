@@ -65,7 +65,6 @@ export async function GET() {
       results,
       notifications,
     ] = await Promise.all([
-      // 1. Get user's league entry
       prisma.leagueEntry.findUnique({
         where: {
           seasonId_playerId: {
@@ -85,13 +84,9 @@ export async function GET() {
           goalDifference: true,
         },
       }),
-      
-      // 2. Get total players in season
       prisma.leagueEntry.count({
         where: { seasonId: activeSeason.id },
       }),
-      
-      // 3. Get user's fixtures
       prisma.fixture.findMany({
         where: {
           seasonId: activeSeason.id,
@@ -126,8 +121,6 @@ export async function GET() {
         orderBy: { scheduledDate: 'desc' },
         take: 10,
       }),
-      
-      // 4. Get user's results
       prisma.result.findMany({
         where: {
           fixture: {
@@ -168,8 +161,6 @@ export async function GET() {
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
-      
-      // 5. Get user's notifications
       prisma.notification.findMany({
         where: { userId },
         select: {
@@ -233,9 +224,9 @@ export async function GET() {
     }
 
     // ✅ Get recent result
-    const recentResult = results.find(r => r.approved);
     let recentResultData = null;
-    if (recentResult) {
+    const recentResult = results.find(r => r.approved && r.fixture);
+    if (recentResult && recentResult.fixture) {
       const isHome = recentResult.fixture.homePlayerId === userId;
       const opponent = isHome
         ? (recentResult.fixture.awayPlayer?.profile?.username || recentResult.fixture.awayPlayer?.name || 'Opponent')
@@ -251,12 +242,14 @@ export async function GET() {
       };
     }
 
-    // ✅ Get recent form (last 5 results)
+    // ✅ Get recent form - FIXED: Filter out null fixtures
     const recentForm = results
-      .filter(r => r.approved)
+      .filter(r => r.approved && r.fixture !== null) // ✅ Ensure fixture exists
       .slice(0, 5)
       .map(r => {
-        const isHome = r.fixture.homePlayerId === userId;
+        // ✅ r.fixture is guaranteed to exist due to filter above
+        const fixture = r.fixture!;
+        const isHome = fixture.homePlayerId === userId;
         const myScore = toNumber(isHome ? r.homeScore : r.awayScore);
         const opponentScore = toNumber(isHome ? r.awayScore : r.homeScore);
         if (myScore > opponentScore) return "W";
@@ -279,8 +272,9 @@ export async function GET() {
     let tempStreak = 0;
     let tempType: 'wins' | 'losses' | null = null;
 
-    for (const result of results.filter(r => r.approved)) {
-      const isHome = result.fixture.homePlayerId === userId;
+    for (const result of results.filter(r => r.approved && r.fixture !== null)) {
+      const fixture = result.fixture!;
+      const isHome = fixture.homePlayerId === userId;
       const myScore = toNumber(isHome ? result.homeScore : result.awayScore);
       const opponentScore = toNumber(isHome ? result.awayScore : result.homeScore);
       const isWin = myScore > opponentScore;
@@ -344,16 +338,26 @@ export async function GET() {
 
     // ✅ Format activity
     const activity = [
-      ...results.slice(0, 3).map(r => ({
-        id: r.id,
-        type: r.approved ? 'RESULT_APPROVED' : 'RESULT_SUBMITTED',
-        title: r.approved ? '✅ Result Approved' : '📝 Result Submitted',
-        description: r.approved 
-          ? `Your match against ${r.fixture.homePlayerId === userId ? r.fixture.awayPlayer?.profile?.username || r.fixture.awayPlayer?.name : r.fixture.homePlayer?.profile?.username || r.fixture.homePlayer?.name} has been approved. Score: ${toNumber(r.homeScore)} - ${toNumber(r.awayScore)}`
-          : `You submitted a result against ${r.fixture.homePlayerId === userId ? r.fixture.awayPlayer?.profile?.username || r.fixture.awayPlayer?.name : r.fixture.homePlayer?.profile?.username || r.fixture.homePlayer?.name}`,
-        timestamp: r.createdAt,
-        read: true,
-      })),
+      ...results
+        .filter(r => r.fixture !== null)
+        .slice(0, 3)
+        .map(r => {
+          const fixture = r.fixture!;
+          const isHome = fixture.homePlayerId === userId;
+          const opponent = isHome
+            ? (fixture.awayPlayer?.profile?.username || fixture.awayPlayer?.name || 'Opponent')
+            : (fixture.homePlayer?.profile?.username || fixture.homePlayer?.name || 'Opponent');
+          return {
+            id: r.id,
+            type: r.approved ? 'RESULT_APPROVED' : 'RESULT_SUBMITTED',
+            title: r.approved ? '✅ Result Approved' : '📝 Result Submitted',
+            description: r.approved 
+              ? `Your match against ${opponent} has been approved. Score: ${toNumber(r.homeScore)} - ${toNumber(r.awayScore)}`
+              : `You submitted a result against ${opponent}`,
+            timestamp: r.createdAt,
+            read: true,
+          };
+        }),
       ...notifications.map(n => ({
         id: n.id,
         type: n.type,
@@ -367,7 +371,6 @@ export async function GET() {
     const duration = performance.now() - startTime;
     console.log(`📊 Dashboard data fetched in ${duration.toFixed(0)}ms`);
 
-    // ✅ Return response with all numbers converted
     return NextResponse.json({
       matchesPlayed: totalMatches,
       wins,

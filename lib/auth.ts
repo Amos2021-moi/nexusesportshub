@@ -363,9 +363,8 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
   
-  // ✅ Add these for better reliability
+  // ✅ Use secure cookies in production
   useSecureCookies: process.env.NODE_ENV === "production",
-  trustHost: true,
 }
 
 // ============================================ //

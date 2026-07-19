@@ -9,20 +9,21 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
+const isDevelopment = process.env.NODE_ENV === 'development'
+const isProduction = process.env.NODE_ENV === 'production'
+
 // ✅ OPTIMIZED: Prisma client with proper logging
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   // ✅ Only log errors in production
-  log: process.env.NODE_ENV === 'development' 
-    ? ['error', 'warn', 'info']
-    : ['error'],
+  log: isDevelopment ? ['error', 'warn', 'info'] : ['error'],
 })
 
 // ============================================ //
 // ✅ MONITOR: Connection pool health           //
 // ============================================ //
 
-// ✅ Log connection pool status
-if (process.env.NODE_ENV !== 'production') {
+// ✅ Log connection pool status (only in development)
+if (!isProduction) {
   setInterval(() => {
     // @ts-ignore - Internal property access
     const pool = prisma._pool
@@ -65,12 +66,12 @@ prisma.$use(async (params, next) => {
     : null
 
   // ✅ Check cache for read operations in production
-  if (cacheKey && process.env.NODE_ENV === 'production') {
+  if (cacheKey && isProduction) {
     const cached = queryCache.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < CACHE_TTL.DEFAULT) {
       cacheHits++
       // Only log in development
-      if (process.env.NODE_ENV === 'development') {
+      if (isDevelopment) {
         console.log(`✅ Cache HIT: ${model}.${action}`)
       }
       return cached.data
@@ -88,7 +89,7 @@ prisma.$use(async (params, next) => {
     ])
 
     // ✅ Cache read results in production
-    if (cacheKey && process.env.NODE_ENV === 'production') {
+    if (cacheKey && isProduction) {
       // ✅ Determine TTL based on operation
       let ttl = CACHE_TTL.DEFAULT
       if (model === 'Season' || model === 'Tournament' || model === 'Award') {
@@ -116,7 +117,7 @@ prisma.$use(async (params, next) => {
 
     // ✅ Log slow queries
     const duration = performance.now() - startTime
-    const slowThreshold = process.env.NODE_ENV === 'production' ? 500 : 100
+    const slowThreshold = isProduction ? 500 : 100
     if (duration > slowThreshold) {
       console.warn(`🐌 Slow query: ${model}.${action} took ${duration.toFixed(0)}ms`)
     }
@@ -141,7 +142,7 @@ prisma.$use(async (params, next) => {
 // ✅ CLEANUP: Clear cache periodically         //
 // ============================================ //
 
-if (process.env.NODE_ENV === 'production') {
+if (isProduction) {
   setInterval(() => {
     const now = Date.now()
     for (const [key, value] of queryCache) {
@@ -156,7 +157,7 @@ if (process.env.NODE_ENV === 'production') {
 // ✅ DEV ONLY: Global instance                 //
 // ============================================ //
 
-if (process.env.NODE_ENV !== 'production') {
+if (!isProduction) {
   globalForPrisma.prisma = prisma
 }
 
