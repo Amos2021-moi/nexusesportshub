@@ -1,0 +1,34 @@
+# node_modules - Vercel uses its own build system
+node_modules/
+
+# Build outputs
+.next/
+dist/
+build/
+
+# Backup files
+backups/
+*.zip
+*.sqlite
+*.sqlite3
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db

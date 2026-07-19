@@ -1,0 +1,28 @@
+{
+  "buildCommand": "prisma generate && next build",
+  "crons": [
+    {
+      "path": "/api/admin/backup/cron",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/maintenance",
+      "schedule": "0 2 * * *"
+    }
+  ],
+  "functions": {
+    "app/api/admin/backup/cron/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/admin/backup/queue/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/admin/backup/create/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/admin/backup/upload/route.ts": {
+      "maxDuration": 60
+    }
+  },
+  "ignoreCommand": "echo 'Ignoring backups folder'"
+}

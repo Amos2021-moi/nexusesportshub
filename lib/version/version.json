@@ -1,0 +1,13 @@
+{
+  "version": "0.1.52",
+  "major": 0,
+  "minor": 1,
+  "patch": 52,
+  "build": 1784461259,
+  "hash": "a39ca5d",
+  "environment": "development",
+  "deploymentId": "local",
+  "date": "2026-07-19T11:40:59.548Z",
+  "incrementType": "auto",
+  "autoUpdate": true
+}

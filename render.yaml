@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: nexus-whatsapp-bot
+    runtime: node
+    plan: free
+    rootDir: whatsapp-bot
+    buildCommand: npm run render-build
+    startCommand: npm start
+    envVars:
+      - key: WHATSAPP_SESSION_DIR
+        value: ./sessions
+      - key: WHATSAPP_GROUP_JID
+        value: 120363429411366095@g.us
+      - key: NEXUS_API_URL
+        value: https://nexus-esports-backup.vercel.app/api
+      - key: WEBHOOK_SECRET
+        value: XNyBPzdOi/+jKbv5GsnOqLacRx6Hq4O+dQsY2jbxACg=
+      - key: LOG_LEVEL
+        value: info
+      - key: PORT
+        value: 3001
+    disks:
+      - name: sessions
+        mountPath: /opt/render/project/src/whatsapp-bot/sessions
+        sizeGB: 1
