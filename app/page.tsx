@@ -1219,40 +1219,41 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/admin/stats");
-      if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
-      const data = await res.json();
-      setStats({
-        totalPlayers: data.totalPlayers || 0,
-        totalFixtures: data.totalFixtures || 0,
-        totalTournaments: data.totalTournaments || 0,
-        totalAwards: data.totalAwards || 0,
-        totalSeasons: data.totalSeasons || 0,
-        totalNews: data.totalNews || 0,
-        activePlayers: data.activePlayers || 0,
-        completionRate: data.completionRate || 0,
-      });
-    } catch (err) {
-      console.error("Error fetching stats:", err);
-      setError("Unable to load live stats");
-      // ✅ Set default stats so page doesn't break
-      setStats({
-        totalPlayers: 0,
-        totalFixtures: 0,
-        totalTournaments: 0,
-        totalAwards: 0,
-        totalSeasons: 0,
-        totalNews: 0,
-        activePlayers: 0,
-        completionRate: 0,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  setLoading(true);
+  setError(null);
+  try {
+    // ✅ Use public endpoint instead of admin
+    const res = await fetch("/api/public/stats");
+    if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+    const data = await res.json();
+    setStats({
+      totalPlayers: data.totalPlayers || 0,
+      totalFixtures: data.totalFixtures || 0,
+      totalTournaments: data.totalTournaments || 0,
+      totalAwards: data.totalAwards || 0,
+      totalSeasons: data.totalSeasons || 0,
+      totalNews: data.totalNews || 0,
+      activePlayers: data.activePlayers || 0,
+      completionRate: data.completionRate || 0,
+    });
+  } catch (err) {
+    console.error("Error fetching stats:", err);
+    setError("Unable to load live stats");
+    // ✅ Set default stats so page doesn't break
+    setStats({
+      totalPlayers: 0,
+      totalFixtures: 0,
+      totalTournaments: 0,
+      totalAwards: 0,
+      totalSeasons: 0,
+      totalNews: 0,
+      activePlayers: 0,
+      completionRate: 0,
+    });
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     fetchStats();

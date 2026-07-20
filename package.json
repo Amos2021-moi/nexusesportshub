@@ -1,6 +1,6 @@
 {
   "name": "nexus-esports-league",
-  "version": "0.1.59",
+  "version": "0.1.66",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 --turbo",

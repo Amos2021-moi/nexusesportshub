@@ -54,13 +54,13 @@ const itemVariants = {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] as const },
   },
   exit: {
     opacity: 0,
     y: -12,
     scale: 0.96,
-    transition: { duration: 0.25, ease: "easeInOut" },
+    transition: { duration: 0.25, ease: [0.25, 1, 0.5, 1] as const },
   },
 };
 
@@ -105,17 +105,17 @@ const DecorBackground = memo(() => (
     <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
     <motion.div
       animate={{ scale: [1, 1.15, 1], opacity: [0.2, 0.35, 0.2] }}
-      transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+        transition={{ duration: 15, repeat: Infinity, ease: [0.43, 0.13, 0.23, 0.96] }}
       className="absolute -left-40 top-10 h-[500px] w-[500px] rounded-full bg-indigo-600/20 blur-[130px]"
     />
     <motion.div
       animate={{ scale: [1.15, 1, 1.15], opacity: [0.15, 0.3, 0.15] }}
-      transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+      transition={{ duration: 18, repeat: Infinity, ease: [0.43, 0.13, 0.23, 0.96] }}
       className="absolute -right-40 top-1/3 h-[500px] w-[500px] rounded-full bg-purple-600/15 blur-[130px]"
     />
     <motion.div
       animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.25, 0.1] }}
-      transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+      transition={{ duration: 20, repeat: Infinity, ease: [0.43, 0.13, 0.23, 0.96] }}
       className="absolute bottom-10 left-1/4 h-[450px] w-[450px] rounded-full bg-pink-600/10 blur-[130px]"
     />
     <div
@@ -335,7 +335,7 @@ export default function NewsPage() {
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
             className="mb-10 text-center sm:mb-14"
           >
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-1.5 text-sm font-bold tracking-wide text-indigo-300 shadow-sm backdrop-blur-md mb-4 sm:mb-5">
@@ -359,7 +359,7 @@ export default function NewsPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
+            transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
             className="mb-10 flex flex-wrap items-center justify-center gap-2 sm:mb-12 sm:gap-3"
           >
             {categories.map((cat) => {
@@ -393,6 +393,7 @@ export default function NewsPage() {
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
               className="mx-auto max-w-xl rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-10 text-center shadow-xl backdrop-blur-xl sm:p-14"
             >
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-indigo-400/60 shadow-inner sm:h-20 sm:w-20">
