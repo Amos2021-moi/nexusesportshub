@@ -72,10 +72,10 @@ export default function PlayersPage() {
   const [filter, setFilter] = useState<"all" | "verified" | "top" | "rising">("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false); // ✅ Prevent multiple fetches
 
   // ✅ Force dark mode on mount
   useEffect(() => {
-    // Check if dark mode is enabled
     const isDark =
       document.documentElement.classList.contains("dark") ||
       localStorage.getItem("theme") === "dark";
@@ -85,9 +85,12 @@ export default function PlayersPage() {
     }
   }, []);
 
+  // ✅ Only fetch once
   useEffect(() => {
+    if (hasFetched) return;
+    setHasFetched(true);
     fetchPlayers();
-  }, []);
+  }, [hasFetched]);
 
   async function fetchPlayers() {
     try {
@@ -100,6 +103,11 @@ export default function PlayersPage() {
       setLoading(false);
     }
   }
+
+  // ✅ Refresh function
+  const refreshPlayers = () => {
+    setHasFetched(false);
+  };
 
   const filteredPlayers = players.filter((player) => {
     const username = player.profile?.username || player.name || "";

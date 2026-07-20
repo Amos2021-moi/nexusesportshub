@@ -1,7 +1,7 @@
 "use client";
 
 import EmptyState from "@/components/ui/EmptyState";
-import { useEffect, useState, useCallback,memo } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import {
@@ -246,6 +246,7 @@ export default function SquadsPage() {
     showSquad: true,
   });
   const [isOwnProfile, setIsOwnProfile] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false); // ✅ Prevent multiple fetches
   const [formData, setFormData] = useState({
     type: "MAIN",
     screenshot: "",
@@ -255,10 +256,13 @@ export default function SquadsPage() {
     description: "",
   });
 
+  // ✅ Only fetch once
   useEffect(() => {
+    if (hasFetched) return;
+    setHasFetched(true);
     fetchSquads();
     fetchPrivacySettings();
-  }, []);
+  }, [hasFetched]);
 
   async function fetchSquads() {
     try {
@@ -316,6 +320,7 @@ export default function SquadsPage() {
           playstyle: "",
           description: "",
         });
+        setHasFetched(false); // ✅ Allow refetch
         fetchSquads();
       } else {
         const error = await res.json();
@@ -333,6 +338,7 @@ export default function SquadsPage() {
         const res = await fetch(`/api/squads?id=${id}`, { method: "DELETE" });
         if (res.ok) {
           toast.success("Squad removed");
+          setHasFetched(false); // ✅ Allow refetch
           fetchSquads();
         } else {
           toast.error("Failed to remove");

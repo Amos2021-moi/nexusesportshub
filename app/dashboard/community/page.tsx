@@ -2,7 +2,7 @@
 
 import EmptyState from "@/components/ui/EmptyState";
 import Image from "next/image";
-import { useEffect, useState, useMemo, useCallback,memo } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
 import {
   Heart,
@@ -226,17 +226,26 @@ export default function CommunityPage() {
     allowComments: boolean;
   }>({ allowComments: true });
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [hasFetched, setHasFetched] = useState(false); // ✅ Prevent multiple fetches
 
+  // ✅ Only fetch once
   useEffect(() => {
+    if (hasFetched) return;
+    setHasFetched(true);
     fetchPosts();
     fetchPrivacySettings();
-  }, []);
+  }, [hasFetched]);
 
   async function fetchPosts() {
-    const res = await fetch("/api/community/posts");
-    const data = await res.json();
-    setPosts(Array.isArray(data) ? data : []);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/community/posts");
+      const data = await res.json();
+      setPosts(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error fetching posts:", error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function fetchPrivacySettings() {
@@ -253,6 +262,11 @@ export default function CommunityPage() {
     }
   }
 
+  // ✅ Refresh function that resets hasFetched
+  const refreshPosts = useCallback(() => {
+    setHasFetched(false);
+  }, []);
+
   const handleCreatePost = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPost.trim()) {
@@ -261,49 +275,57 @@ export default function CommunityPage() {
     }
 
     setPosting(true);
-    const res = await fetch("/api/community/posts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: newPost,
-        image: newPostImage,
-        type: newPostType,
-      }),
-    });
+    try {
+      const res = await fetch("/api/community/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: newPost,
+          image: newPostImage,
+          type: newPostType,
+        }),
+      });
 
-    if (res.ok) {
-      toast.success("Post shared!");
-      setNewPost("");
-      setNewPostImage(null);
-      setNewPostType("GENERAL");
-      fetchPosts();
-    } else {
+      if (res.ok) {
+        toast.success("Post shared!");
+        setNewPost("");
+        setNewPostImage(null);
+        setNewPostType("GENERAL");
+        refreshPosts(); // ✅ Refetch after posting
+      } else {
+        toast.error("Failed to post");
+      }
+    } catch (error) {
       toast.error("Failed to post");
     }
     setPosting(false);
-  }, [newPost, newPostImage, newPostType]);
+  }, [newPost, newPostImage, newPostType, refreshPosts]);
 
   const handleLike = useCallback(async (postId: string) => {
-    const res = await fetch("/api/community/like", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId }),
-    });
+    try {
+      const res = await fetch("/api/community/like", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId }),
+      });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.liked) {
-        setLikedPosts((prev) => new Set(prev).add(postId));
-      } else {
-        setLikedPosts((prev) => {
-          const next = new Set(prev);
-          next.delete(postId);
-          return next;
-        });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.liked) {
+          setLikedPosts((prev) => new Set(prev).add(postId));
+        } else {
+          setLikedPosts((prev) => {
+            const next = new Set(prev);
+            next.delete(postId);
+            return next;
+          });
+        }
+        refreshPosts(); // ✅ Refetch after like
       }
-      fetchPosts();
+    } catch (error) {
+      console.error("Error liking post:", error);
     }
-  }, []);
+  }, [refreshPosts]);
 
   const handleComment = useCallback(async (postId: string) => {
     if (!privacySettings.allowComments) {
@@ -316,24 +338,28 @@ export default function CommunityPage() {
       return;
     }
 
-    const res = await fetch("/api/community/comment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        postId,
-        content: commentText,
-      }),
-    });
+    try {
+      const res = await fetch("/api/community/comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId,
+          content: commentText,
+        }),
+      });
 
-    if (res.ok) {
-      toast.success("Comment added!");
-      setCommentText("");
-      setCommenting(null);
-      fetchPosts();
-    } else {
+      if (res.ok) {
+        toast.success("Comment added!");
+        setCommentText("");
+        setCommenting(null);
+        refreshPosts(); // ✅ Refetch after comment
+      } else {
+        toast.error("Failed to add comment");
+      }
+    } catch (error) {
       toast.error("Failed to add comment");
     }
-  }, [commentText, privacySettings.allowComments]);
+  }, [commentText, privacySettings.allowComments, refreshPosts]);
 
   const handleDeletePost = useCallback(async (postId: string) => {
     if (!confirm("Are you sure you want to delete this post?")) return;
@@ -345,7 +371,7 @@ export default function CommunityPage() {
 
       if (res.ok) {
         toast.success("Post deleted");
-        fetchPosts();
+        refreshPosts(); // ✅ Refetch after delete
       } else {
         toast.error("Failed to delete post");
       }
@@ -353,7 +379,7 @@ export default function CommunityPage() {
       console.error("Error deleting post:", error);
       toast.error("Failed to delete post");
     }
-  }, []);
+  }, [refreshPosts]);
 
   const handleEditPost = useCallback(async (postId: string) => {
     if (!editContent.trim()) {
@@ -372,7 +398,7 @@ export default function CommunityPage() {
         toast.success("Post updated!");
         setEditingPost(null);
         setEditContent("");
-        fetchPosts();
+        refreshPosts(); // ✅ Refetch after edit
       } else {
         toast.error("Failed to update post");
       }
@@ -380,7 +406,7 @@ export default function CommunityPage() {
       console.error("Error editing post:", error);
       toast.error("Failed to update post");
     }
-  }, [editContent]);
+  }, [editContent, refreshPosts]);
 
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -413,6 +439,14 @@ export default function CommunityPage() {
   );
 
   const canComment = privacySettings.allowComments || false;
+
+  // ✅ Trigger refetch when hasFetched becomes false
+  useEffect(() => {
+    if (!hasFetched && !loading) {
+      fetchPosts();
+      setHasFetched(true);
+    }
+  }, [hasFetched, loading]);
 
   if (loading) {
     return (
