@@ -84,7 +84,7 @@ prisma.$use(async (params, next) => {
     const result = await Promise.race([
       next(params),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`Query timeout after 10s: ${model}.${action}`)), 10000)
+        setTimeout(() => reject(new Error(`Query timeout after 20s: ${model}.${action}`)), 20000)
       )
     ])
 

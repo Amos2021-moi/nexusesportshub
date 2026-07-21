@@ -1,10 +1,13 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["tracing", "metrics"]
+  binaryTargets = ["native"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // ✅ Connection pool settings go in the URL, not here
 }
 
 model User {
@@ -29,6 +32,8 @@ model User {
   emailNotificationsEnabled Boolean                 @default(false)
   notificationPreferences   Json?
   lastEmailSentAt           DateTime?
+  
+  // Relations
   auditLogs                 AuditLog[]
   awards                    Award[]
   backups                   Backup[]
@@ -56,14 +61,21 @@ model User {
   seasonEntries             SeasonEntry[]
   paymentAudits             PaymentAudit[]
   playerSeasonEntries       PlayerSeasonEntry[]
-    communicationLogs   CommunicationLog[]        // ADD THIS
-  communicationReceipts CommunicationReceipt[]  // ADD THIS
-  versions Version[]  // 👈 ADD THIS LINE
-  playerStat                PlayerStat?             // ✅ Keep this
-pushSubscriptions    PushSubscription[]   // ✅ ADD THIS
+  communicationLogs         CommunicationLog[]
+  communicationReceipts     CommunicationReceipt[]
+  versions                  Version[]
+  playerStat                PlayerStat?
+  pushSubscriptions         PushSubscription[]
+  
+  // ✅ SUPER FAST INDEXES
   @@index([email])
   @@index([role])
   @@index([createdAt])
+  @@index([lastActive])
+  @@index([isVerified])
+  @@index([role, createdAt])
+  @@index([role, lastActive])
+  @@index([email, role])
 }
 
 model Profile {
@@ -95,6 +107,12 @@ model Profile {
   trustScore         Int          @default(0)
   playerStats        PlayerStats?
   user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // ✅ SUPER FAST INDEXES
+  @@index([username])
+  @@index([trustScore])
+  @@index([createdAt])
+  @@index([userId, username])
 }
 
 model PlayerStats {
@@ -108,6 +126,12 @@ model PlayerStats {
   matchesPlayed Int     @default(0)
   winRate       Float   @default(0)
   profile       Profile @relation(fields: [profileId], references: [id])
+  
+  @@index([seasonId])
+  @@index([profileId])
+  @@index([matchesPlayed])
+  @@index([goals])
+  @@index([winRate])
 }
 
 model Season {
@@ -120,16 +144,24 @@ model Season {
   isActive      Boolean       @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
-  seasonEntries SeasonEntry[] // ✅ ADD THIS LINE
-  prizePool     PrizePool?    // ✅ ADD THIS LINE
+  
+  seasonEntries SeasonEntry[]
+  prizePool     PrizePool?
   awards        Award[]
   fixtures      Fixture[]
   hallOfFame    HallOfFame[]
   leagueEntries LeagueEntry[]
   tournaments   Tournament[]
-   // ✅ ADD THESE (no fields argument needed)
   leagueSettings       LeagueSettings?
   playerSeasonEntries  PlayerSeasonEntry[]
+  
+  // ✅ SUPER FAST INDEXES
+  @@index([isActive])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([isActive, status])
+  @@index([startDate, endDate])
 }
 
 model Tournament {
@@ -147,6 +179,14 @@ model Tournament {
   season       Season?                 @relation(fields: [seasonId], references: [id])
   matches      TournamentMatch[]
   participants TournamentParticipant[]
+  
+  // ✅ SUPER FAST INDEXES
+  @@index([seasonId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([seasonId, status])
+  @@index([status, startDate])
 }
 
 model Fixture {
@@ -173,11 +213,18 @@ model Fixture {
   season           Season    @relation(fields: [seasonId], references: [id])
   result           Result?
 
+  // ✅ SUPER FAST INDEXES
   @@index([seasonId])
   @@index([homePlayerId])
   @@index([awayPlayerId])
   @@index([status])
   @@index([scheduledDate])
+  @@index([seasonId, status])
+  @@index([seasonId, scheduledDate])
+  @@index([homePlayerId, status])
+  @@index([awayPlayerId, status])
+  @@index([status, scheduledDate])
+  @@index([createdAt])
 }
 
 model Result {
@@ -195,9 +242,14 @@ model Result {
   user              User             @relation(fields: [submittedBy], references: [id])
   tournamentMatch   TournamentMatch? @relation(fields: [tournamentMatchId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@index([fixtureId])
   @@index([approved])
   @@index([createdAt])
+  @@index([submittedBy])
+  @@index([approved, createdAt])
+  @@index([source])
+  @@index([createdAt, approved])
 }
 
 model LeagueEntry {
@@ -219,7 +271,17 @@ model LeagueEntry {
   player         User   @relation(fields: [playerId], references: [id])
   season         Season @relation(fields: [seasonId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@unique([seasonId, playerId])
+  @@index([seasonId])
+  @@index([playerId])
+  @@index([points])
+  @@index([wins])
+  @@index([played])
+  @@index([seasonId, points])
+  @@index([seasonId, wins])
+  @@index([seasonId, played])
+  @@index([points, goalDifference])
 }
 
 model Squad {
@@ -237,6 +299,15 @@ model Squad {
   updatedAt    DateTime  @updatedAt
   status       String    @default("APPROVED")
   user         User      @relation(fields: [userId], references: [id])
+
+  // ✅ SUPER FAST INDEXES
+  @@index([userId])
+  @@index([type])
+  @@index([isActive])
+  @@index([status])
+  @@index([userId, isActive])
+  @@index([type, isActive])
+  @@index([createdAt])
 }
 
 model Post {
@@ -254,9 +325,15 @@ model Post {
   user      User      @relation(fields: [userId], references: [id])
   reports   Report[]
 
+  // ✅ SUPER FAST INDEXES
   @@index([userId])
   @@index([type])
   @@index([createdAt])
+  @@index([status])
+  @@index([userId, type])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([likes])
 }
 
 model Comment {
@@ -268,9 +345,11 @@ model Comment {
   post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@index([postId])
   @@index([userId])
   @@index([createdAt])
+  @@index([postId, createdAt])
 }
 
 model Like {
@@ -282,6 +361,8 @@ model Like {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
 }
 
 model Award {
@@ -297,7 +378,12 @@ model Award {
   season          Season   @relation(fields: [seasonId], references: [id])
   winner          User     @relation(fields: [winnerId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@unique([seasonId, category, winnerId])
+  @@index([seasonId])
+  @@index([winnerId])
+  @@index([category])
+  @@index([awardedAt])
 }
 
 model HallOfFame {
@@ -310,6 +396,12 @@ model HallOfFame {
   inductedAt DateTime @default(now())
   player     User     @relation(fields: [playerId], references: [id])
   season     Season   @relation(fields: [seasonId], references: [id])
+
+  // ✅ SUPER FAST INDEXES
+  @@index([playerId])
+  @@index([seasonId])
+  @@index([category])
+  @@index([inductedAt])
 }
 
 model News {
@@ -323,6 +415,13 @@ model News {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   author      User      @relation(fields: [authorId], references: [id])
+
+  // ✅ SUPER FAST INDEXES
+  @@index([authorId])
+  @@index([published])
+  @@index([publishedAt])
+  @@index([createdAt])
+  @@index([published, publishedAt])
 }
 
 model AuditLog {
@@ -337,9 +436,14 @@ model AuditLog {
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+  @@index([targetType])
+  @@index([targetId])
+  @@index([userId, action])
+  @@index([createdAt, action])
 }
 
 model TournamentMatch {
@@ -364,9 +468,15 @@ model TournamentMatch {
   tournament    Tournament @relation(fields: [tournamentId], references: [id])
   winner        User?      @relation("WinnerMatches", fields: [winnerId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@index([tournamentId])
   @@index([status])
   @@index([round])
+  @@index([bracket])
+  @@index([tournamentId, status])
+  @@index([tournamentId, round])
+  @@index([status, scheduledDate])
+  @@index([winnerId])
 }
 
 model TournamentParticipant {
@@ -379,8 +489,13 @@ model TournamentParticipant {
   player       User       @relation(fields: [playerId], references: [id])
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@unique([tournamentId, playerId])
+  @@index([tournamentId])
+  @@index([playerId])
+  @@index([eliminated])
 }
+
 model Setting {
   id        String   @id @default(cuid())
   userId    String?
@@ -391,7 +506,12 @@ model Setting {
   updatedAt DateTime @updatedAt
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // ✅ SUPER FAST INDEXES
   @@unique([userId, category, key])
+  @@index([userId])
+  @@index([category])
+  @@index([key])
+  @@index([userId, category])
 }
 
 model Backup {
@@ -410,6 +530,14 @@ model Backup {
   restoredBy  String?
   user        User         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   restoreLogs RestoreLog[]
+
+  // ✅ SUPER FAST INDEXES
+  @@index([createdBy])
+  @@index([status])
+  @@index([createdAt])
+  @@index([type])
+  @@index([createdBy, status])
+  @@index([createdAt, status])
 }
 
 model RestoreLog {
@@ -422,6 +550,11 @@ model RestoreLog {
   details     Json?
   backup      Backup    @relation(fields: [backupId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [restoredBy], references: [id])
+
+  // ✅ SUPER FAST INDEXES
+  @@index([backupId])
+  @@index([status])
+  @@index([startedAt])
 }
 
 model BackupConfig {
@@ -435,6 +568,9 @@ model BackupConfig {
   lastRunAt   DateTime?
   nextRunAt   DateTime?
   updatedAt   DateTime  @updatedAt
+
+  // ✅ SUPER FAST INDEXES
+  @@index([enabled])
 }
 
 model Report {
@@ -449,18 +585,31 @@ model Report {
   post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   reportedUser   User     @relation("ReportReportedUser", fields: [reportedUserId], references: [id])
   reporter       User?    @relation("ReportReporter", fields: [reporterId], references: [id])
+
+  // ✅ SUPER FAST INDEXES
+  @@index([postId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([reportedUserId])
+  @@index([reporterId])
+  @@index([postId, status])
+  @@index([status, createdAt])
 }
 
 model Maintenance {
   id          String   @id @default(cuid())
   isActive    Boolean  @default(false)
   message     String?  @db.Text
-  scheduledEnd DateTime? // ✅ New name
+  scheduledEnd DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // ✅ SUPER FAST INDEXES
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([scheduledEnd])
 }
 
-// ✅ Competition Entry System
 enum CompetitionStatus {
   NOT_ENROLLED
   PAYMENT_PENDING
@@ -493,14 +642,17 @@ model SeasonEntry {
   
   paymentAudits PaymentAudit[] 
 
-  // ✅ Opposite relations
-  leagueEntry       LeagueEntry?          // For LeagueEntry → SeasonEntry
-  playerSeasonEntry PlayerSeasonEntry?    // For PlayerSeasonEntry → SeasonEntry
+  leagueEntry       LeagueEntry?
+  playerSeasonEntry PlayerSeasonEntry?
 
+  // ✅ SUPER FAST INDEXES
   @@unique([userId, seasonId])
   @@index([userId])
   @@index([seasonId])
   @@index([status])
+  @@index([createdAt])
+  @@index([userId, seasonId, status])
+  @@index([seasonId, status])
 }
 
 model PrizePool {
@@ -516,6 +668,9 @@ model PrizePool {
   updatedAt        DateTime @updatedAt
 
   season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  // ✅ SUPER FAST INDEXES
+  @@index([seasonId])
 }
 
 model PaymentAudit {
@@ -529,12 +684,13 @@ model PaymentAudit {
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   seasonEntry SeasonEntry @relation(fields: [seasonEntryId], references: [id], onDelete: Cascade)
 
+  // ✅ SUPER FAST INDEXES
   @@index([userId])
   @@index([seasonEntryId])
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
-// ✅ League Settings - Control payment requirements
 model LeagueSettings {
   id              String   @id @default(cuid())
   seasonId        String   @unique
@@ -544,6 +700,9 @@ model LeagueSettings {
   updatedAt       DateTime @updatedAt
   
   season          Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  // ✅ SUPER FAST INDEXES
+  @@index([seasonId])
 }
 
 model PlayerSeasonEntry {
@@ -553,7 +712,7 @@ model PlayerSeasonEntry {
   hasPaid        Boolean  @default(false)
   paidAt         DateTime?
   paymentReceipt String?
-  paymentMethod  String?   // "MPESA" | "CASH" | "BANK"
+  paymentMethod  String?
   paymentPhone   String?
   seasonEntryId  String?  @unique
   createdAt      DateTime @default(now())
@@ -563,10 +722,12 @@ model PlayerSeasonEntry {
   season         Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   seasonEntry    SeasonEntry? @relation(fields: [seasonEntryId], references: [id], onDelete: SetNull)
   
+  // ✅ SUPER FAST INDEXES
   @@unique([userId, seasonId])
   @@index([userId])
   @@index([seasonId])
   @@index([hasPaid])
+  @@index([userId, seasonId, hasPaid])
 }
 
 model PlayerStat {
@@ -584,43 +745,47 @@ model PlayerStat {
   updatedAt   DateTime @updatedAt
   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ✅ SUPER FAST INDEXES
+  @@index([userId])
+  @@index([elo])
+  @@index([matches])
+  @@index([wins])
+  @@index([elo, matches])
 }
 
 model Notification {
   id            String   @id @default(cuid())
   userId        String
   
-  // Content
   title         String
   message       String
-  type          String   // MATCH_RESULT_PENDING, NEW_FIXTURE, etc.
+  type          String
   
-  // Priority System
-  priority      Int      @default(50)  // 0-100 score
-  priorityLevel String   @default("MEDIUM") // CRITICAL | HIGH | MEDIUM | LOW
-  reason        String?  // Why this priority was assigned
+  priority      Int      @default(50)
+  priorityLevel String   @default("MEDIUM")
+  reason        String?
   
-  // Delivery
-  channel       String   @default("IN_APP") // IN_APP | PUSH | EMAIL | SMS | WHATSAPP
+  channel       String   @default("IN_APP")
   link          String?
   
-  // Status
   read          Boolean  @default(false)
   deliveredAt   DateTime?
   readAt        DateTime?
   
-  // Timestamps
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Relations
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Indexes
+  // ✅ SUPER FAST INDEXES
   @@index([userId])
   @@index([userId, read])
   @@index([priorityLevel])
   @@index([createdAt])
+  @@index([userId, priorityLevel])
+  @@index([userId, createdAt])
+  @@index([userId, read, priorityLevel])
 }
 
 model NotificationPreference {
@@ -644,28 +809,36 @@ model NotificationPreference {
   updatedAt         DateTime @updatedAt
   
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ✅ SUPER FAST INDEXES
+  @@index([userId])
 }
 
 model CommunicationLog {
   id             String   @id @default(cuid())
-  adminId        String   // Who sent it
-  subject        String   // Email subject or notification title
+  adminId        String
+  subject        String
   message        String   @db.Text
-  channel        String   // EMAIL | IN_APP | BOTH
-  recipientType  String   // ALL | SPECIFIC
-  recipientIds   String[] // Array of user IDs
-  recipientCount Int      // Number of recipients
-  status         String   @default("PENDING") // PENDING | SENT | PARTIAL | FAILED
+  channel        String
+  recipientType  String
+  recipientIds   String[]
+  recipientCount Int
+  status         String   @default("PENDING")
   sentAt         DateTime @default(now())
   deliveredAt    DateTime?
-  metadata       Json?    // Additional data (send stats, errors, etc.)
-attachments CommunicationAttachment[]
+  metadata       Json?
+  attachments    CommunicationAttachment[]
   admin          User     @relation(fields: [adminId], references: [id])
-  receipts CommunicationReceipt[]  // ADD THIS
+  receipts CommunicationReceipt[]
+
+  // ✅ SUPER FAST INDEXES
   @@index([adminId])
   @@index([sentAt])
   @@index([status])
+  @@index([adminId, sentAt])
+  @@index([status, sentAt])
 }
+
 model CommunicationAttachment {
   id        String   @id @default(cuid())
   logId     String
@@ -678,6 +851,7 @@ model CommunicationAttachment {
 
   log       CommunicationLog @relation(fields: [logId], references: [id], onDelete: Cascade)
 
+  // ✅ SUPER FAST INDEXES
   @@index([logId])
 }
 
@@ -685,37 +859,43 @@ model CommunicationReceipt {
   id        String   @id @default(cuid())
   logId     String
   userId    String
-  channel   String   // EMAIL | IN_APP
-  status    String   // SENT | DELIVERED | READ | FAILED
+  channel   String
+  status    String
   sentAt    DateTime @default(now())
   readAt    DateTime?
-  error     String?  // If failed, store error message
+  error     String?
 
   log       CommunicationLog @relation(fields: [logId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@unique([logId, userId, channel])
   @@index([logId])
   @@index([userId])
   @@index([status])
   @@index([readAt])
+  @@index([logId, status])
+  @@index([userId, status])
 }
 
 model Version {
   id          String   @id @default(cuid())
-  version     String   // e.g., "1.0.1"
-  build       Int      // Auto-incrementing build number
-  hash        String?  // Git commit hash (first 7 chars)
-  changelog   String?  @db.Text // What changed
-  deployedBy  String   // Admin who deployed
-  environment String   @default("development") // dev | staging | production
+  version     String
+  build       Int
+  hash        String?
+  changelog   String?  @db.Text
+  deployedBy  String
+  environment String   @default("development")
   deployedAt  DateTime @default(now())
 
   admin       User     @relation(fields: [deployedBy], references: [id])
 
+  // ✅ SUPER FAST INDEXES
   @@index([deployedAt])
   @@index([version])
   @@index([environment])
+  @@index([version, environment])
+  @@index([deployedAt, version])
 }
 
 model PushSubscription {
@@ -730,7 +910,9 @@ model PushSubscription {
 
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // ✅ SUPER FAST INDEXES
   @@index([userId])
+  @@index([createdAt])
 }
 
 enum SquadType {
