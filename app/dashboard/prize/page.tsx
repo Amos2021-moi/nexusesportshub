@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback,memo } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
@@ -29,41 +29,73 @@ import {
 } from "lucide-react";
 import PrizeDisplay from "@/components/competition/PrizeDisplay";
 import toast from "react-hot-toast";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-yellow-500/20 blur-3xl" />
+      <div className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-amber-500/15 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage:
+            "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Info Card ===
 const InfoCard = memo(({ icon: Icon, title, items, iconColor }: {
   icon: any;
   title: string;
   items: string[];
   iconColor: string;
 }) => (
-  <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
+  <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/30">
     <div className="flex items-center gap-2 mb-2">
       <Icon className={`h-4 w-4 ${iconColor}`} />
       <h3 className="text-sm font-semibold text-white">{title}</h3>
@@ -81,66 +113,38 @@ const InfoCard = memo(({ icon: Icon, title, items, iconColor }: {
 
 InfoCard.displayName = "InfoCard";
 
+// === STATIC Quick Link ===
 const QuickLink = memo(({ icon: Icon, title, subtitle, href, color }: {
   icon: any;
   title: string;
   subtitle: string;
   href: string;
   color: string;
-}) => (
-  <Link
-    href={href}
-    className="bg-white/5 hover:bg-white/10 rounded-xl p-3 border border-white/10 transition-all group text-center"
-  >
-    <Icon className={`h-5 w-5 ${color} mx-auto mb-1 group-hover:scale-110 transition-transform`} />
-    <p className="text-xs font-medium text-white">{title}</p>
-    <p className="text-[10px] text-gray-500">{subtitle}</p>
-  </Link>
-));
+}) => {
+  const isMobile = useIsMobile();
+  const hoverClass = isMobile ? "" : "hover:bg-white/10 group-hover:scale-110";
+
+  return (
+    <Link
+      href={href}
+      className={`bg-white/5 rounded-xl p-3 border border-white/10 transition-colors duration-150 text-center ${isMobile ? "" : "hover:bg-white/10"}`}
+    >
+      <Icon className={`h-5 w-5 ${color} mx-auto mb-1 transition-transform duration-150 ${hoverClass}`} />
+      <p className="text-xs font-medium text-white">{title}</p>
+      <p className="text-[10px] text-gray-500">{subtitle}</p>
+    </Link>
+  );
+});
 
 QuickLink.displayName = "QuickLink";
 
 /* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-    <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-yellow-500/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-amber-500/15 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.03]"
-      style={{
-        backgroundImage:
-          "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-        backgroundSize: "60px 60px",
-      }}
-    />
-  </div>
-));
-
-DecorBackground.displayName = "DecorBackground";
-
-/* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function PrizePage() {
   const { data: session } = useSession();
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [seasonName, setSeasonName] = useState("");
 
@@ -182,7 +186,7 @@ export default function PrizePage() {
     return (
       <>
         <DecorBackground />
-        <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64 px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-yellow-500/20" />
@@ -201,16 +205,11 @@ export default function PrizePage() {
   }
 
   return (
-    <div className="relative">
+    <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div variants={itemVariants} className="flex flex-wrap items-center justify-between gap-4">
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-white sm:text-3xl">
               <Trophy className="h-7 w-7 text-yellow-400" />
@@ -222,18 +221,15 @@ export default function PrizePage() {
           </div>
           <Link
             href="/dashboard"
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gray-700/50 px-4 py-2 text-sm text-white transition-all hover:bg-gray-600/50"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gray-700/50 px-4 py-2 text-sm text-white transition-colors duration-150 hover:bg-gray-600/50"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
           </Link>
-        </motion.div>
+        </div>
 
-        {/* Info Banner */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 flex items-start gap-3 backdrop-blur-xl"
-        >
+        {/* Info Banner - NO animations */}
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 flex items-start gap-3 backdrop-blur-xl">
           <Info className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm text-blue-400 font-medium">How Prize Pool Works</p>
@@ -242,15 +238,13 @@ export default function PrizePage() {
               The higher you finish, the bigger your reward!
             </p>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Prize Display */}
-        <motion.div variants={itemVariants}>
-          <PrizeDisplay compact={false} showDetails={true} />
-        </motion.div>
+        {/* Prize Display - NO animations */}
+        <PrizeDisplay compact={false} showDetails={true} />
 
-        {/* Additional Info */}
-        <motion.div variants={containerVariants} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Additional Info - NO animations */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <InfoCard
             icon={BarChart3}
             title="Why This Matters"
@@ -263,10 +257,10 @@ export default function PrizePage() {
             items={tipItems}
             iconColor="text-yellow-400"
           />
-        </motion.div>
+        </div>
 
-        {/* Quick Links */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        {/* Quick Links - NO animations */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <QuickLink
             icon={TrendingUp}
             title="View Standings"
@@ -288,8 +282,8 @@ export default function PrizePage() {
             href="/dashboard/statistics"
             color="text-green-400"
           />
-        </motion.div>
-      </motion.div>
-    </div>
+        </div>
+      </div>
+    </>
   );
 }

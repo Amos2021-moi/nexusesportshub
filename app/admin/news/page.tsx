@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
@@ -21,10 +21,27 @@ import {
   FileText,
   Filter,
   PenLine,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { motion, type Variants } from "framer-motion";
 import toast from "react-hot-toast";
+
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 interface NewsItem {
   id: string;
@@ -42,24 +59,197 @@ interface NewsItem {
   };
 }
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
-  },
-};
+/* -------------------------------------------------------------------------- */
+/*                            Helper Functions                                */
+/* -------------------------------------------------------------------------- */
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.45, ease: "easeOut" },
-  },
-};
+function isThisMonth(date: string) {
+  const input = new Date(date);
+  const now = new Date();
+  return input.getFullYear() === now.getFullYear() && input.getMonth() === now.getMonth();
+}
 
-function DecorBackground() {
+function authorName(item: NewsItem) {
+  return item.author.profile?.username || item.author.name || item.author.email;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                            Memoized Components                             */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Stat Card - NO animations ===
+const StatCard = memo(({ stat }: { stat: any }) => {
+  const isMobile = useIsMobile();
+  
+  return (
+    <div className={`group relative min-h-[44px] overflow-hidden rounded-2xl border bg-gray-800/40 p-3 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-pink-500/40 sm:p-4 ${stat.ring}`}>
+      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-300 group-hover:opacity-70`} />
+      <div className="relative flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`text-xl font-bold sm:text-2xl ${stat.accent}`}>{stat.value}</p>
+          <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
+        </div>
+        <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 sm:h-10 sm:w-10 ${stat.accent}`}>
+          <stat.icon className="h-4 w-4 sm:h-5 sm:w-5" />
+        </span>
+      </div>
+      <p className="relative mt-2 truncate text-[10px] text-gray-500 sm:text-[11px]">{stat.hint}</p>
+    </div>
+  );
+});
+
+StatCard.displayName = "StatCard";
+
+// === STATIC News Card - NO animations ===
+const NewsCard = memo(({ 
+  item, 
+  onTogglePublish, 
+  onDelete, 
+  toggling, 
+  deleting 
+}: {
+  item: NewsItem;
+  onTogglePublish: (id: string, currentStatus: boolean) => void;
+  onDelete: (id: string) => void;
+  toggling: string | null;
+  deleting: string | null;
+}) => {
+  const isMobile = useIsMobile();
+  
+  const handleToggle = useCallback(() => {
+    onTogglePublish(item.id, item.published);
+  }, [onTogglePublish, item.id, item.published]);
+
+  const handleDelete = useCallback(() => {
+    onDelete(item.id);
+  }, [onDelete, item.id]);
+
+  // NO hover effects on mobile
+  const hoverClass = isMobile ? "" : "hover:border-pink-500/40";
+  const imageScaleClass = isMobile ? "" : "group-hover:scale-105";
+
+  return (
+    <div className={`group overflow-hidden rounded-2xl border border-white/10 bg-gray-800/40 shadow-xl backdrop-blur-xl transition-colors duration-150 ${hoverClass}`}>
+      {item.image ? (
+        <div className="relative h-36 overflow-hidden bg-gray-900 sm:h-44">
+          <img 
+            src={item.image} 
+            alt={item.title} 
+            className={`h-full w-full object-cover transition-transform duration-300 ${imageScaleClass}`}
+            loading="lazy"
+            decoding="async"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/20 to-transparent" />
+        </div>
+      ) : (
+        <div className="flex h-24 items-center justify-center bg-gradient-to-br from-pink-500/10 to-purple-500/10 sm:h-32">
+          <ImageIcon className="h-9 w-9 text-gray-600" />
+        </div>
+      )}
+
+      <div className="p-4 sm:p-5">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          {item.published ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-400/20 bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-300">
+              <CheckCircle size={12} />
+              Published
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400/20 bg-yellow-500/15 px-2.5 py-1 text-xs font-medium text-yellow-300">
+              <Clock size={12} />
+              Draft
+            </span>
+          )}
+          {item.image && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-gray-900/40 px-2.5 py-1 text-xs text-gray-400">
+              <ImageIcon size={12} />
+              Image
+            </span>
+          )}
+        </div>
+
+        <h2 className="line-clamp-2 text-lg font-semibold text-white">{item.title}</h2>
+        <p className="mt-2 line-clamp-3 text-sm text-gray-400">{item.content}</p>
+
+        <div className="mt-4 grid gap-2 text-xs text-gray-500 sm:grid-cols-2">
+          <span className="flex min-w-0 items-center gap-1.5 rounded-xl bg-gray-900/40 px-3 py-2">
+            <User size={12} className="flex-shrink-0" />
+            <span className="truncate">{authorName(item)}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1.5 rounded-xl bg-gray-900/40 px-3 py-2">
+            <Calendar size={12} className="flex-shrink-0" />
+            <span className="truncate">{new Date(item.createdAt).toLocaleDateString()}</span>
+          </span>
+          {item.publishedAt && (
+            <span className="flex min-w-0 items-center gap-1.5 rounded-xl bg-gray-900/40 px-3 py-2 sm:col-span-2">
+              <CheckCircle size={12} className="flex-shrink-0 text-green-400" />
+              <span className="truncate">Published: {new Date(item.publishedAt).toLocaleDateString()}</span>
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-end">
+          <button
+            onClick={handleToggle}
+            disabled={toggling === item.id}
+            className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors duration-150 ${
+              item.published
+                ? "border border-yellow-500/30 bg-yellow-600/15 text-yellow-300 hover:bg-yellow-600/25"
+                : "border border-green-500/30 bg-green-600/15 text-green-300 hover:bg-green-600/25"
+            } disabled:opacity-50`}
+            title={item.published ? "Unpublish" : "Publish"}
+          >
+            {toggling === item.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : item.published ? (
+              <EyeOff size={16} />
+            ) : (
+              <Eye size={16} />
+            )}
+            {item.published ? "Unpublish" : "Publish"}
+          </button>
+          <Link
+            href={`/admin/news/${item.id}/edit`}
+            className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-600/15 px-4 text-sm font-semibold text-blue-300 transition-colors duration-150 hover:bg-blue-600/25"
+          >
+            <Edit size={16} />
+            Edit
+          </Link>
+          <button
+            onClick={handleDelete}
+            disabled={deleting === item.id}
+            className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-600/15 px-4 text-sm font-semibold text-red-300 transition-colors duration-150 hover:bg-red-600/25 disabled:opacity-50"
+          >
+            {deleting === item.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 size={16} />
+            )}
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+NewsCard.displayName = "NewsCard";
+
+/* -------------------------------------------------------------------------- */
+/*                            STATIC Background - NO ANIMATIONS              */
+/* -------------------------------------------------------------------------- */
+
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  // On mobile - return minimal background, NO animations
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  // Desktop - static background with NO animations
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
       <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-pink-600/20 blur-[120px]" />
@@ -75,21 +265,18 @@ function DecorBackground() {
       />
     </div>
   );
-}
+});
 
-function isThisMonth(date: string) {
-  const input = new Date(date);
-  const now = new Date();
-  return input.getFullYear() === now.getFullYear() && input.getMonth() === now.getMonth();
-}
+DecorBackground.displayName = "DecorBackground";
 
-function authorName(item: NewsItem) {
-  return item.author.profile?.username || item.author.name || item.author.email;
-}
+/* -------------------------------------------------------------------------- */
+/*                            Main Component                                  */
+/* -------------------------------------------------------------------------- */
 
 export default function AdminNewsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -130,7 +317,7 @@ export default function AdminNewsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
+  const handleDelete = useCallback(async (id: string) => {
     if (!confirm("Are you sure you want to delete this news article?")) return;
 
     setDeleting(id);
@@ -148,9 +335,9 @@ export default function AdminNewsPage() {
     } finally {
       setDeleting(null);
     }
-  }
+  }, []);
 
-  async function handleTogglePublish(id: string, currentStatus: boolean) {
+  const handleTogglePublish = useCallback(async (id: string, currentStatus: boolean) => {
     setToggling(id);
     try {
       const newsItem = news.find((n) => n.id === id);
@@ -180,8 +367,9 @@ export default function AdminNewsPage() {
     } finally {
       setToggling(null);
     }
-  }
+  }, [news]);
 
+  // === Memoized filtered data ===
   const filteredNews = useMemo(
     () =>
       news.filter((item) => {
@@ -198,29 +386,11 @@ export default function AdminNewsPage() {
     [filter, news, search]
   );
 
-  const publishedCount = news.filter((n) => n.published).length;
-  const draftCount = news.filter((n) => !n.published).length;
-  const thisMonthCount = news.filter((n) => isThisMonth(n.createdAt)).length;
+  const publishedCount = useMemo(() => news.filter((n) => n.published).length, [news]);
+  const draftCount = useMemo(() => news.filter((n) => !n.published).length, [news]);
+  const thisMonthCount = useMemo(() => news.filter((n) => isThisMonth(n.createdAt)).length, [news]);
 
-  if (status === "loading" || loading) {
-    return (
-      <>
-        <DecorBackground />
-        <div className="flex h-64 items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto mb-3 h-12 w-12 animate-spin rounded-full border-[3px] border-pink-500 border-t-transparent" />
-            <p className="text-gray-400">Loading news...</p>
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  if (session?.user?.role !== "ADMIN") {
-    return null;
-  }
-
-  const statCards = [
+  const statCards = useMemo(() => [
     {
       label: "Total Articles",
       value: news.length,
@@ -257,28 +427,49 @@ export default function AdminNewsPage() {
       ring: "border-purple-500/20",
       glow: "from-purple-500/20",
     },
-  ];
+  ], [news.length, publishedCount, draftCount, thisMonthCount]);
 
-  const filterButtons = [
+  const filterButtons = useMemo(() => [
     { value: "all" as const, label: "All", count: news.length, active: "bg-indigo-500/20 text-indigo-300" },
     { value: "published" as const, label: "Published", count: publishedCount, active: "bg-green-500/20 text-green-300" },
     { value: "draft" as const, label: "Drafts", count: draftCount, active: "bg-yellow-500/20 text-yellow-300" },
-  ];
+  ], [news.length, publishedCount, draftCount]);
 
+  // === Callbacks ===
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+  }, []);
+
+  const handleFilterChange = useCallback((value: "all" | "published" | "draft") => {
+    setFilter(value);
+  }, []);
+
+  // === Loading State ===
+  if (status === "loading" || loading) {
+    return (
+      <>
+        <DecorBackground />
+        <div className="flex h-64 items-center justify-center px-4">
+          <div className="text-center">
+            <div className="mx-auto mb-3 h-12 w-12 animate-spin rounded-full border-[3px] border-pink-500 border-t-transparent" />
+            <p className="text-gray-400">Loading news...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (session?.user?.role !== "ADMIN") {
+    return null;
+  }
+
+  // === RENDER - NO animations on mobile ===
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-pink-600/20 via-rose-600/20 to-purple-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-pink-600/20 via-rose-600/20 to-purple-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-pink-500/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -286,8 +477,8 @@ export default function AdminNewsPage() {
                 <Newspaper className="h-5 w-5 text-white sm:h-6 sm:w-6" />
               </span>
               <div className="min-w-0">
-                <h1 className="truncate text-xl font-bold text-white sm:text-2xl">📰 News Management</h1>
-                <p className="mt-0.5 text-xs text-gray-300 sm:text-sm">Create and manage news articles</p>
+                <h1 className="truncate text-lg font-bold text-white sm:text-2xl">📰 News Management</h1>
+                <p className="mt-0.5 truncate text-xs text-gray-300 sm:text-sm">Create and manage news articles</p>
               </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -297,42 +488,24 @@ export default function AdminNewsPage() {
               </span>
               <Link
                 href="/admin/news/create"
-                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-pink-900/30 transition-all hover:from-pink-700 hover:to-rose-700"
+                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-pink-900/30 transition-all duration-150 hover:from-pink-700 hover:to-rose-700"
               >
                 <Plus size={18} />
                 Create News
               </Link>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Stats */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {/* Stats - NO animations */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {statCards.map((stat) => (
-            <motion.div
-              key={stat.label}
-              variants={itemVariants}
-              whileHover={{ y: -4 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              className={`group relative min-h-[44px] overflow-hidden rounded-2xl border bg-gray-800/40 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-pink-500/40 ${stat.ring}`}
-            >
-              <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity group-hover:opacity-70`} />
-              <div className="relative flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className={`text-2xl font-bold ${stat.accent}`}>{stat.value}</p>
-                  <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
-                </div>
-                <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 ${stat.accent}`}>
-                  <stat.icon className="h-5 w-5" />
-                </span>
-              </div>
-              <p className="relative mt-2 truncate text-[11px] text-gray-500">{stat.hint}</p>
-            </motion.div>
+            <StatCard key={stat.label} stat={stat} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Filters */}
-        <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-gray-800/40 p-4 shadow-2xl backdrop-blur-xl">
+        {/* Filters - NO animations */}
+        <div className="rounded-2xl border border-white/10 bg-gray-800/40 p-4 shadow-2xl backdrop-blur-xl">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
@@ -340,16 +513,16 @@ export default function AdminNewsPage() {
                 type="text"
                 placeholder="Search news by title, content, or author..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-white placeholder-gray-500 transition-colors focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/30"
+                onChange={handleSearchChange}
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/30"
               />
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-xl border border-white/10 bg-gray-900/40 p-1 lg:flex">
               {filterButtons.map((button) => (
                 <button
                   key={button.value}
-                  onClick={() => setFilter(button.value)}
-                  className={`flex min-h-[44px] items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium transition-all sm:px-4 sm:text-sm ${
+                  onClick={() => handleFilterChange(button.value)}
+                  className={`flex min-h-[44px] items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium transition-colors duration-150 sm:px-4 sm:text-sm ${
                     filter === button.value ? button.active : "text-gray-400 hover:bg-white/5 hover:text-white"
                   }`}
                 >
@@ -360,135 +533,46 @@ export default function AdminNewsPage() {
             </div>
             <button
               onClick={fetchNews}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-white/10 bg-gray-900/50 text-gray-400 transition-all hover:bg-white/5 hover:text-white"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-white/10 bg-gray-900/50 text-gray-400 transition-colors duration-150 hover:bg-white/5 hover:text-white"
               title="Refresh"
             >
               <RefreshCw size={18} />
             </button>
           </div>
-        </motion.div>
+        </div>
 
-        {/* News List */}
+        {/* News List - NO animations */}
         {filteredNews.length === 0 ? (
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-gray-800/40 py-12 text-center shadow-2xl backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/10 bg-gray-800/40 py-12 text-center shadow-2xl backdrop-blur-xl">
             <Newspaper className="mx-auto mb-4 h-16 w-16 text-gray-600" />
             <h3 className="mb-2 text-xl font-semibold text-white">No News Articles</h3>
-            <p className="px-4 text-gray-400">{search ? "No articles match your search." : "Create your first news article."}</p>
+            <p className="px-4 text-sm text-gray-400 sm:text-base">
+              {search ? "No articles match your search." : "Create your first news article."}
+            </p>
             {!search && (
-              <Link href="/admin/news/create" className="mt-4 inline-flex min-h-[44px] items-center text-pink-400 transition-all hover:text-pink-300">
+              <Link 
+                href="/admin/news/create" 
+                className="mt-4 inline-flex min-h-[44px] items-center text-pink-400 transition-colors duration-150 hover:text-pink-300"
+              >
                 Create News →
               </Link>
             )}
-          </motion.div>
+          </div>
         ) : (
-          <motion.div variants={containerVariants} className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {filteredNews.map((item) => (
-              <motion.div
+              <NewsCard
                 key={item.id}
-                variants={itemVariants}
-                whileHover={{ y: -3 }}
-                transition={{ type: "spring", stiffness: 300, damping: 22 }}
-                className="group overflow-hidden rounded-2xl border border-white/10 bg-gray-800/40 shadow-xl backdrop-blur-xl transition-colors hover:border-pink-500/40"
-              >
-                {item.image ? (
-                  <div className="relative h-36 overflow-hidden bg-gray-900 sm:h-44">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.image} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/20 to-transparent" />
-                  </div>
-                ) : (
-                  <div className="flex h-24 items-center justify-center bg-gradient-to-br from-pink-500/10 to-purple-500/10 sm:h-32">
-                    <ImageIcon className="h-9 w-9 text-gray-600" />
-                  </div>
-                )}
-
-                <div className="p-4 sm:p-5">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    {item.published ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-green-400/20 bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-300">
-                        <CheckCircle size={12} />
-                        Published
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400/20 bg-yellow-500/15 px-2.5 py-1 text-xs font-medium text-yellow-300">
-                        <Clock size={12} />
-                        Draft
-                      </span>
-                    )}
-                    {item.image && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-gray-900/40 px-2.5 py-1 text-xs text-gray-400">
-                        <ImageIcon size={12} />
-                        Image
-                      </span>
-                    )}
-                  </div>
-
-                  <h2 className="line-clamp-2 text-lg font-semibold text-white">{item.title}</h2>
-                  <p className="mt-2 line-clamp-3 text-sm text-gray-400">{item.content}</p>
-
-                  <div className="mt-4 grid gap-2 text-xs text-gray-500 sm:grid-cols-2">
-                    <span className="flex min-w-0 items-center gap-1.5 rounded-xl bg-gray-900/40 px-3 py-2">
-                      <User size={12} className="flex-shrink-0" />
-                      <span className="truncate">{authorName(item)}</span>
-                    </span>
-                    <span className="flex min-w-0 items-center gap-1.5 rounded-xl bg-gray-900/40 px-3 py-2">
-                      <Calendar size={12} className="flex-shrink-0" />
-                      <span className="truncate">{new Date(item.createdAt).toLocaleDateString()}</span>
-                    </span>
-                    {item.publishedAt && (
-                      <span className="flex min-w-0 items-center gap-1.5 rounded-xl bg-gray-900/40 px-3 py-2 sm:col-span-2">
-                        <CheckCircle size={12} className="flex-shrink-0 text-green-400" />
-                        <span className="truncate">Published: {new Date(item.publishedAt).toLocaleDateString()}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-end">
-                    <button
-                      onClick={() => handleTogglePublish(item.id, item.published)}
-                      disabled={toggling === item.id}
-                      className={`flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all ${
-                        item.published
-                          ? "border border-yellow-500/30 bg-yellow-600/15 text-yellow-300 hover:bg-yellow-600/25"
-                          : "border border-green-500/30 bg-green-600/15 text-green-300 hover:bg-green-600/25"
-                      }`}
-                      title={item.published ? "Unpublish" : "Publish"}
-                    >
-                      {toggling === item.id ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      ) : item.published ? (
-                        <EyeOff size={16} />
-                      ) : (
-                        <Eye size={16} />
-                      )}
-                      {item.published ? "Unpublish" : "Publish"}
-                    </button>
-                    <Link
-                      href={`/admin/news/${item.id}/edit`}
-                      className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-600/15 px-4 text-sm font-semibold text-blue-300 transition-all hover:bg-blue-600/25"
-                    >
-                      <Edit size={16} />
-                      Edit
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      disabled={deleting === item.id}
-                      className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-600/15 px-4 text-sm font-semibold text-red-300 transition-all hover:bg-red-600/25 disabled:opacity-50"
-                    >
-                      {deleting === item.id ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-400 border-t-transparent" />
-                      ) : (
-                        <Trash2 size={16} />
-                      )}
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
+                item={item}
+                onTogglePublish={handleTogglePublish}
+                onDelete={handleDelete}
+                toggling={toggling}
+                deleting={deleting}
+              />
             ))}
-          </motion.div>
+          </div>
         )}
-      </motion.div>
+      </div>
     </>
   );
 }

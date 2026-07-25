@@ -3,7 +3,34 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// ✅ Add pagination support
+// ✅ Helper: Get moderation settings
+async function getModerationSettings() {
+  const settings = await prisma.setting.findMany({
+    where: {
+      category: "moderation"
+    }
+  })
+
+  const result: Record<string, any> = {
+    postApproval: true,
+    commentFiltering: true,
+    squadApproval: false,
+    playerReports: true,
+    autoBanThreshold: 5,
+    requireVerification: false,
+    allowGuestReporting: true
+  }
+
+  settings.forEach(s => {
+    if (s.key in result) {
+      result[s.key] = JSON.parse(s.value)
+    }
+  })
+
+  return result
+}
+
+// ✅ GET: Fetch posts (for community feed - only APPROVED)
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -16,13 +43,9 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get("limit") || "20")
     const skip = (page - 1) * limit
 
-    // ✅ Get moderation settings
-    const moderation = await getModerationSettings()
-
-    // ✅ Build where clause
-    const whereClause: any = {}
-    if (moderation.postApproval) {
-      whereClause.status = "APPROVED"
+    // ✅ Only show APPROVED posts in the community feed
+    const whereClause: any = {
+      status: "APPROVED"
     }
 
     const [posts, total] = await Promise.all([
@@ -68,34 +91,7 @@ export async function GET(request: Request) {
   }
 }
 
-// ✅ Helper: Get moderation settings
-async function getModerationSettings() {
-  const settings = await prisma.setting.findMany({
-    where: {
-      category: "moderation"
-    }
-  })
-
-  const result: Record<string, any> = {
-    postApproval: false,
-    commentFiltering: true,
-    squadApproval: false,
-    playerReports: true,
-    autoBanThreshold: 5,
-    requireVerification: false,
-    allowGuestReporting: true
-  }
-
-  settings.forEach(s => {
-    if (s.key in result) {
-      result[s.key] = JSON.parse(s.value)
-    }
-  })
-
-  return result
-}
-
-// ✅ POST method (keep your existing code)
+// ✅ POST: Create a post - ALWAYS PENDING
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -124,15 +120,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 })
     }
 
-    const status = moderation.postApproval ? "PENDING" : "APPROVED"
-
+    // ✅ ALWAYS set status to PENDING - never auto-approve
     const post = await prisma.post.create({
       data: {
         userId: session.user.id,
         content: content.trim(),
         image: image || null,
         type: type || "GENERAL",
-        status: status
+        status: "PENDING"
       },
       include: {
         user: {
@@ -141,23 +136,26 @@ export async function POST(request: Request) {
       }
     })
 
-    if (status === "PENDING") {
-      const admins = await prisma.user.findMany({
-        where: { role: "ADMIN" },
-        select: { id: true }
-      })
+    // ✅ Notify all admins
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true }
+    })
 
-      if (admins.length > 0) {
-        await prisma.notification.createMany({
-          data: admins.map(admin => ({
-            userId: admin.id,
-            title: "📝 New Post Pending Approval",
-            message: `A new post by ${session.user.name || "a player"} needs your review.`,
-            type: "MODERATION",
-            link: `/admin/community`
-          }))
-        })
-      }
+    if (admins.length > 0) {
+      await prisma.notification.createMany({
+        data: admins.map(admin => ({
+          userId: admin.id,
+          title: "📝 New Post Pending Approval",
+          message: `A new post by ${session.user.name || "a player"} needs your review.`,
+          type: "MODERATION",
+          link: `/admin/community`,
+          read: false,
+          priority: 70,
+          priorityLevel: "HIGH",
+          channel: "IN_APP"
+        }))
+      })
     }
 
     return NextResponse.json(post)
@@ -167,7 +165,7 @@ export async function POST(request: Request) {
   }
 }
 
-// ✅ DELETE method (keep your existing code)
+// ✅ DELETE: Delete a post
 export async function DELETE(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -192,7 +190,9 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
     }
 
-    if (post.userId !== session.user.id) {
+    // Allow if owner or admin
+    const isAdmin = session.user.role === "ADMIN"
+    if (post.userId !== session.user.id && !isAdmin) {
       return NextResponse.json({ error: "Unauthorized to delete this post" }, { status: 403 })
     }
 

@@ -25,40 +25,29 @@ export async function POST(request: Request) {
       )
     }
 
-    // ✅ Check if player entry exists
-    let playerEntry = await prisma.playerSeasonEntry.findUnique({
+    // ✅ Use upsert instead of findUnique + create/update
+    const playerEntry = await prisma.playerSeasonEntry.upsert({
       where: {
         userId_seasonId: {
           userId,
           seasonId,
         },
       },
+      update: {
+        hasPaid: true,
+        paidAt: new Date(),
+        paymentReceipt: receipt || `ADMIN-${Date.now()}`,
+        paymentMethod: method || "CASH",
+      },
+      create: {
+        userId,
+        seasonId,
+        hasPaid: true,
+        paidAt: new Date(),
+        paymentReceipt: receipt || `ADMIN-${Date.now()}`,
+        paymentMethod: method || "CASH",
+      },
     })
-
-    if (playerEntry) {
-      // ✅ Update existing entry
-      playerEntry = await prisma.playerSeasonEntry.update({
-        where: { id: playerEntry.id },
-        data: {
-          hasPaid: true,
-          paidAt: new Date(),
-          paymentReceipt: receipt || `ADMIN-${Date.now()}`,
-          paymentMethod: method || "CASH",
-        },
-      })
-    } else {
-      // ✅ Create new entry
-      playerEntry = await prisma.playerSeasonEntry.create({
-        data: {
-          userId,
-          seasonId,
-          hasPaid: true,
-          paidAt: new Date(),
-          paymentReceipt: receipt || `ADMIN-${Date.now()}`,
-          paymentMethod: method || "CASH",
-        },
-      })
-    }
 
     // ✅ Get league settings to update prize pool
     const leagueSettings = await prisma.leagueSettings.findUnique({

@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
+// ✅ Lazy load the backup worker to avoid tracing issues
+async function getBackupWorker() {
+  // ✅ Dynamic import with webpack ignore to prevent tracing
+  const { backupWorker } = await import(/* webpackIgnore: true */ '@/lib/services/backup.worker');
+  return backupWorker;
+}
+
 // ✅ CRON JOB - Runs automatically at scheduled time
 export async function GET() {
   try {
@@ -55,9 +62,9 @@ export async function GET() {
 
     // ✅ Trigger backup in background (don't await - let it run)
     try {
-      const { backupWorker } = await import('@/lib/services/backup.worker')
+      const worker = await getBackupWorker()
       // Run in background without blocking the response
-      backupWorker.performBackup(backup.id, admin.id)
+      worker.performBackup(backup.id, admin.id)
         .then(() => {
           console.log(`✅ Auto backup ${backup.id} completed successfully`)
         })
@@ -65,14 +72,26 @@ export async function GET() {
           console.error(`❌ Auto backup ${backup.id} failed:`, error)
           prisma.backup.update({
             where: { id: backup.id },
-            data: { status: "FAILED" }
+            data: { 
+              status: "FAILED",
+              metadata: {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                failedAt: new Date().toISOString()
+              }
+            }
           }).catch(e => console.error('Failed to update backup status:', e))
         })
     } catch (error) {
       console.error('❌ Failed to start backup worker:', error)
       await prisma.backup.update({
         where: { id: backup.id },
-        data: { status: "FAILED" }
+        data: { 
+          status: "FAILED",
+          metadata: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            failedAt: new Date().toISOString()
+          }
+        }
       })
     }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useEffect, useState } from "react";
 import { Trophy, Zap, TrendingUp, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,29 @@ const confidenceEmojis = {
   Low: "💫",
 };
 
+/* -------------------------------------------------------------------------- */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           Main Component                                  */
+/* -------------------------------------------------------------------------- */
+
 export default function PredictionBadge({
   winner,
   confidence,
@@ -30,6 +54,9 @@ export default function PredictionBadge({
   compact = false,
   className,
 }: PredictionBadgeProps) {
+  const isMobile = useIsMobile();
+
+  // ✅ Compact view - Static badge
   if (compact) {
     return (
       <span
@@ -47,6 +74,7 @@ export default function PredictionBadge({
     );
   }
 
+  // ✅ Full view - Static badge
   return (
     <div
       className={cn(

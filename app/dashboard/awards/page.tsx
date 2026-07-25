@@ -1,7 +1,7 @@
 "use client";
 
 import EmptyState from "@/components/ui/EmptyState";
-import { useEffect, useState, useMemo, useCallback,memo } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import {
   Trophy,
   Award as AwardIcon,
@@ -20,7 +20,6 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
 
 interface Award {
   id: string;
@@ -100,40 +99,62 @@ function getInitials(name: string): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
+      <div className="absolute -left-32 top-0 h-72 w-72 rounded-full bg-yellow-600/10 blur-3xl" />
+      <div className="absolute -right-32 top-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-indigo-600/15 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Summary Card ===
 const SummaryCard = memo(({ icon: Icon, label, value, gradient, glow }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
@@ -141,30 +162,23 @@ const SummaryCard = memo(({ icon: Icon, label, value, gradient, glow }: {
   gradient: string;
   glow: string;
 }) => (
-  <motion.div
-    variants={statCardVariants}
-    initial="hidden"
-    animate="visible"
-    whileHover="hover"
-    className="will-change-transform"
-  >
-    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl">
-      <div className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${gradient} opacity-20 blur-2xl transition-opacity duration-500 group-hover:opacity-40`} />
-      <div className="relative flex items-center gap-4">
-        <span className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-lg ${glow}`}>
-          <Icon className="h-6 w-6 text-white" />
-        </span>
-        <div>
-          <p className="text-2xl font-extrabold text-white">{value}</p>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
-        </div>
+  <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/40">
+    <div className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${gradient} opacity-20 blur-2xl transition-opacity duration-300 group-hover:opacity-40`} />
+    <div className="relative flex items-center gap-4">
+      <span className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-lg ${glow}`}>
+        <Icon className="h-6 w-6 text-white" />
+      </span>
+      <div>
+        <p className="text-2xl font-extrabold text-white">{value}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
       </div>
     </div>
-  </motion.div>
+  </div>
 ));
 
 SummaryCard.displayName = "SummaryCard";
 
+// === STATIC Award Row ===
 const AwardRow = memo(({ award, index }: { award: Award; index: number }) => {
   const winnerName = award.winner.profile?.username || award.winner.name;
   const Icon = awardIcons[award.icon] || <AwardIcon className="h-8 w-8 text-gray-400" />;
@@ -173,13 +187,7 @@ const AwardRow = memo(({ award, index }: { award: Award; index: number }) => {
   const medal = placementMedal[index];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: 0.04 * index }}
-      whileHover={{ x: 4 }}
-      className={`flex items-center gap-4 border-l-4 bg-gradient-to-r p-4 transition-colors hover:bg-white/5 ${colorClass}`}
-    >
+    <div className={`flex flex-col sm:flex-row sm:items-center gap-4 border-l-4 bg-gradient-to-r p-4 transition-colors duration-150 hover:bg-white/5 ${colorClass}`}>
       <div className={`relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-gray-900/60 ring-1 shadow-lg ${accent.ring} ${accent.glow}`}>
         {Icon}
         {medal && <span className="absolute -right-1 -top-1 text-lg drop-shadow">{medal}</span>}
@@ -217,7 +225,7 @@ const AwardRow = memo(({ award, index }: { award: Award; index: number }) => {
         )}
       </div>
 
-      <div className="hidden flex-shrink-0 text-right sm:block">
+      <div className="flex-shrink-0 text-right">
         <div className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 ring-1 ring-white/10">
           <Calendar className="h-3.5 w-3.5 text-indigo-400" />
           <p className="text-xs font-medium text-indigo-300">
@@ -225,48 +233,40 @@ const AwardRow = memo(({ award, index }: { award: Award; index: number }) => {
           </p>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
 AwardRow.displayName = "AwardRow";
 
-/* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
+// === STATIC Season Group ===
+const SeasonGroup = memo(({ seasonName, awards }: { seasonName: string; awards: Award[] }) => (
+  <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl">
+    <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+      <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10 blur-2xl" />
+      <div className="relative flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+          <Calendar className="h-5 w-5" />
+          {seasonName}
+        </h2>
+        <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/20">
+          {awards.length} {awards.length === 1 ? "award" : "awards"}
+        </span>
+      </div>
+    </div>
 
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-72 w-72 rounded-full bg-yellow-600/10 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-32 top-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-indigo-600/15 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.15]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
-    />
+    <div className="divide-y divide-white/5">
+      {awards.map((award, index) => (
+        <AwardRow key={award.id} award={award} index={index} />
+      ))}
+    </div>
   </div>
 ));
 
-DecorBackground.displayName = "DecorBackground";
+SeasonGroup.displayName = "SeasonGroup";
 
 /* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function AwardsPage() {
@@ -317,11 +317,19 @@ export default function AwardsPage() {
     }, {} as Record<string, Award[]>);
   }, [visibleAwards]);
 
+  const handleSeasonChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSeasonFilter(e.target.value);
+  }, []);
+
+  const handleClearFilter = useCallback(() => {
+    setSeasonFilter("all");
+  }, []);
+
   if (loading) {
     return (
       <>
         <DecorBackground />
-        <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64 px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-yellow-500/20" />
@@ -340,16 +348,11 @@ export default function AwardsPage() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative px-3 pb-20 sm:px-4 lg:px-6">
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div variants={itemVariants}>
+      <div className="space-y-5 sm:space-y-6">
+        {/* Header - NO animations */}
+        <div>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-yellow-500 to-amber-600 shadow-lg shadow-amber-500/30">
@@ -362,16 +365,16 @@ export default function AwardsPage() {
             </div>
             <Link
               href="/hall-of-fame"
-              className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-indigo-400 backdrop-blur-xl transition-all hover:bg-white/10 hover:text-indigo-300"
+              className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-indigo-400 backdrop-blur-xl transition-colors duration-150 hover:bg-white/10 hover:text-indigo-300"
             >
               View Hall of Fame <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Stats Summary */}
+        {/* Stats Summary - NO animations */}
         {awards.length > 0 && (
-          <motion.div variants={containerVariants} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <SummaryCard
               icon={Trophy}
               label="Total Awards"
@@ -393,15 +396,12 @@ export default function AwardsPage() {
               gradient="from-emerald-500 to-green-500"
               glow="shadow-emerald-500/40"
             />
-          </motion.div>
+          </div>
         )}
 
-        {/* Season Filter */}
+        {/* Season Filter - NO animations */}
         {seasonOptions.length > 0 && (
-          <motion.div
-            variants={itemVariants}
-            className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
-          >
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
               <Calendar className="h-4 w-4" />
               Season:
@@ -409,8 +409,8 @@ export default function AwardsPage() {
             <div className="relative flex-1 min-w-[140px] sm:flex-none">
               <select
                 value={seasonFilter}
-                onChange={(e) => setSeasonFilter(e.target.value)}
-                className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2 pr-10 text-sm text-white transition focus:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                onChange={handleSeasonChange}
+                className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2 pr-10 text-sm text-white transition-colors duration-150 focus:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               >
                 <option value="all">All Seasons</option>
                 {seasonOptions.map((name) => (
@@ -421,59 +421,30 @@ export default function AwardsPage() {
             </div>
             {seasonFilter !== "all" && (
               <button
-                onClick={() => setSeasonFilter("all")}
-                className="text-xs text-indigo-400 transition-colors hover:text-indigo-300"
+                onClick={handleClearFilter}
+                className="min-h-[36px] text-xs text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
               >
                 Clear filter ✕
               </button>
             )}
-          </motion.div>
+          </div>
         )}
 
-        {/* Awards by Season */}
+        {/* Awards by Season - NO animations */}
         {Object.keys(groupedAwards).length === 0 ? (
-          <motion.div variants={itemVariants}>
-            <EmptyState
-              title="No Awards Yet"
-              message="Keep competing! Awards are earned through league performance and tournaments."
-              icon={AwardIcon}
-            />
-          </motion.div>
+          <EmptyState
+            title="No Awards Yet"
+            message="Keep competing! Awards are earned through league performance and tournaments."
+            icon={AwardIcon}
+          />
         ) : (
-          <AnimatePresence mode="popLayout">
+          <div>
             {Object.entries(groupedAwards).map(([seasonName, seasonAwards]) => (
-              <motion.div
-                key={seasonName}
-                layout
-                variants={itemVariants}
-                initial="hidden"
-                animate="visible"
-                exit={{ opacity: 0, y: -10 }}
-                className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl"
-              >
-                <div className="relative overflow-hidden bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
-                  <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10 blur-2xl" />
-                  <div className="relative flex items-center justify-between">
-                    <h2 className="flex items-center gap-2 text-xl font-bold text-white">
-                      <Calendar className="h-5 w-5" />
-                      {seasonName}
-                    </h2>
-                    <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/20">
-                      {seasonAwards.length} {seasonAwards.length === 1 ? "award" : "awards"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="divide-y divide-white/5">
-                  {seasonAwards.map((award, index) => (
-                    <AwardRow key={award.id} award={award} index={index} />
-                  ))}
-                </div>
-              </motion.div>
+              <SeasonGroup key={seasonName} seasonName={seasonName} awards={seasonAwards} />
             ))}
-          </AnimatePresence>
+          </div>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }

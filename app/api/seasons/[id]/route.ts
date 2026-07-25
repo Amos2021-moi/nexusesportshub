@@ -138,15 +138,62 @@ export async function DELETE(
     // ✅ Check if season is frozen
     await checkSeasonFreeze(id)
 
-    // Delete related data first
-    await prisma.fixture.deleteMany({ where: { seasonId: id } })
-    await prisma.leagueEntry.deleteMany({ where: { seasonId: id } })
-    await prisma.season.delete({ where: { id } })
+    // ✅ Delete related data in order (respecting foreign key constraints)
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete Hall of Fame entries first (has foreign key to Season)
+      await tx.hallOfFame.deleteMany({
+        where: { seasonId: id }
+      })
 
-    return NextResponse.json({ success: true })
+      // 2. Delete awards (has foreign key to Season)
+      await tx.award.deleteMany({
+        where: { seasonId: id }
+      })
+
+      // 3. Delete season entries (has foreign key to Season)
+      await tx.seasonEntry.deleteMany({
+        where: { seasonId: id }
+      })
+
+      // 4. Delete league entries (has foreign key to Season)
+      await tx.leagueEntry.deleteMany({
+        where: { seasonId: id }
+      })
+
+      // 5. Delete fixtures (has foreign key to Season)
+      await tx.fixture.deleteMany({
+        where: { seasonId: id }
+      })
+
+      // 6. Delete prize pool (has unique foreign key to Season)
+      await tx.prizePool.deleteMany({
+        where: { seasonId: id }
+      })
+
+      // 7. Delete league settings (has unique foreign key to Season)
+      await tx.leagueSettings.deleteMany({
+        where: { seasonId: id }
+      })
+
+      // 8. Delete player season entries (has foreign key to Season)
+      await tx.playerSeasonEntry.deleteMany({
+        where: { seasonId: id }
+      })
+
+      // 9. Finally delete the season
+      await tx.season.delete({
+        where: { id }
+      })
+    })
+
+    return NextResponse.json({ 
+      success: true, 
+      message: "Season and all related data deleted successfully" 
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to delete season"
     const status = message.includes("Unauthorized") ? 401 : message.includes("Forbidden") ? 403 : 500
+    console.error("Delete season error:", error)
     return NextResponse.json({ error: message }, { status })
   }
 }

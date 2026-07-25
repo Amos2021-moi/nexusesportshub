@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useCallback, memo, type FormEvent } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { motion, type Variants } from "framer-motion";
 import {
   Users,
   Shield,
@@ -29,24 +28,49 @@ interface Admin {
   isSuperAdmin: boolean;
 }
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
-  },
-};
+/* -------------------------------------------------------------------------- */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.45, ease: "easeOut" },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
-function DecorBackground() {
+/* -------------------------------------------------------------------------- */
+/*                           Helper Functions                                */
+/* -------------------------------------------------------------------------- */
+
+function adminLabel(admin: Admin) {
+  return admin.username || admin.name || admin.email;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Background - NO ANIMATIONS              */
+/* -------------------------------------------------------------------------- */
+
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  // On mobile - minimal background, NO animations
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  // Desktop - static background with NO animations
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
       <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-[120px]" />
@@ -62,15 +86,112 @@ function DecorBackground() {
       />
     </div>
   );
-}
+});
 
-function adminLabel(admin: Admin) {
-  return admin.username || admin.name || admin.email;
-}
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           Memoized Components                             */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Stat Card - NO animations ===
+const StatCard = memo(({ stat }: { stat: any }) => {
+  const Icon = stat.icon;
+  
+  return (
+    <div className={`group relative min-h-[44px] overflow-hidden rounded-2xl border bg-gray-800/40 p-4 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/40 ${stat.ring}`}>
+      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-300 group-hover:opacity-70`} />
+      <div className="relative flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`text-2xl font-bold ${stat.accent}`}>{stat.value}</p>
+          <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
+        </div>
+        <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 ${stat.accent}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+      <p className="relative mt-2 truncate text-[11px] text-gray-500">{stat.hint}</p>
+    </div>
+  );
+});
+
+StatCard.displayName = "StatCard";
+
+// === STATIC Admin Card - NO animations ===
+const AdminRow = memo(({ 
+  admin, 
+  onRemove, 
+  removing 
+}: { 
+  admin: Admin; 
+  onRemove: (id: string) => void; 
+  removing: string | null;
+}) => {
+  const handleRemove = useCallback(() => {
+    onRemove(admin.id);
+  }, [onRemove, admin.id]);
+
+  return (
+    <div className="flex flex-col gap-3 p-4 transition-colors duration-150 hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 font-bold text-white">
+          {adminLabel(admin).charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate font-medium text-white">{adminLabel(admin)}</p>
+            {admin.isSuperAdmin && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400/20 bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-300">
+                <Crown className="h-3 w-3" />
+                Super Admin
+              </span>
+            )}
+          </div>
+          <p className="truncate text-sm text-gray-400">{admin.email}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-shrink-0 items-center justify-between gap-3 sm:justify-end">
+        <span className="text-xs text-gray-500">
+          Added: {new Date(admin.createdAt).toLocaleDateString()}
+        </span>
+        {!admin.isSuperAdmin ? (
+          <button
+            onClick={handleRemove}
+            disabled={removing === admin.id}
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300 transition-colors duration-150 hover:bg-red-500/20 disabled:opacity-50"
+            title="Remove admin"
+          >
+            {removing === admin.id ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </button>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-gray-900/40 px-3 py-2 text-xs text-gray-400"
+            title="Super admins cannot be removed"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Protected
+          </span>
+        )}
+      </div>
+    </div>
+  );
+});
+
+AdminRow.displayName = "AdminRow";
+
+/* -------------------------------------------------------------------------- */
+/*                               Main Component                               */
+/* -------------------------------------------------------------------------- */
 
 export default function AdminManagementPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
   const [newAdminEmail, setNewAdminEmail] = useState("");
@@ -114,7 +235,7 @@ export default function AdminManagementPage() {
     }
   }
 
-  async function handleAddAdmin(e: FormEvent) {
+  const handleAddAdmin = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     if (!newAdminEmail.trim()) {
       toast.error("Please enter an email");
@@ -143,9 +264,9 @@ export default function AdminManagementPage() {
     } finally {
       setAdding(false);
     }
-  }
+  }, [newAdminEmail]);
 
-  async function handleRemoveAdmin(userId: string) {
+  const handleRemoveAdmin = useCallback(async (userId: string) => {
     if (!confirm("Remove this user as an admin? They will become a regular player.")) return;
 
     setRemoving(userId);
@@ -167,7 +288,7 @@ export default function AdminManagementPage() {
     } finally {
       setRemoving(null);
     }
-  }
+  }, []);
 
   const filteredAdmins = useMemo(() => {
     if (!searchTerm.trim()) return admins;
@@ -177,28 +298,10 @@ export default function AdminManagementPage() {
     );
   }, [admins, searchTerm]);
 
-  if (status === "loading" || loading) {
-    return (
-      <>
-        <DecorBackground />
-        <div className="flex h-64 items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto mb-3 h-12 w-12 animate-spin rounded-full border-[3px] border-indigo-500 border-t-transparent" />
-            <p className="text-sm text-gray-400">Loading admins...</p>
-          </div>
-        </div>
-      </>
-    );
-  }
+  const superAdminCount = useMemo(() => admins.filter((a) => a.isSuperAdmin).length, [admins]);
+  const regularAdminCount = useMemo(() => admins.filter((a) => !a.isSuperAdmin).length, [admins]);
 
-  if (session?.user?.role !== "ADMIN") {
-    return null;
-  }
-
-  const superAdminCount = admins.filter((a) => a.isSuperAdmin).length;
-  const regularAdminCount = admins.filter((a) => !a.isSuperAdmin).length;
-
-  const statCards = [
+  const statCards = useMemo(() => [
     {
       label: "Total Admins",
       value: admins.length,
@@ -226,22 +329,40 @@ export default function AdminManagementPage() {
       ring: "border-green-500/20",
       glow: "from-green-500/20",
     },
-  ];
+  ], [admins.length, superAdminCount, regularAdminCount]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  const handleEmailChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewAdminEmail(e.target.value);
+  }, []);
+
+  if (status === "loading" || loading) {
+    return (
+      <>
+        <DecorBackground />
+        <div className="flex h-64 items-center justify-center px-4">
+          <div className="text-center">
+            <div className="mx-auto mb-3 h-12 w-12 animate-spin rounded-full border-[3px] border-indigo-500 border-t-transparent" />
+            <p className="text-sm text-gray-400">Loading admins...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (session?.user?.role !== "ADMIN") {
+    return null;
+  }
 
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -252,7 +373,7 @@ export default function AdminManagementPage() {
                 <h1 className="truncate text-xl font-bold text-white sm:text-2xl">
                   🛡️ Admin Management
                 </h1>
-                <p className="mt-0.5 text-xs text-gray-300 sm:text-sm">
+                <p className="mt-0.5 truncate text-xs text-gray-300 sm:text-sm">
                   Manage administrators. Super admins are defined in environment variables.
                 </p>
               </div>
@@ -262,38 +383,17 @@ export default function AdminManagementPage() {
               {admins.length} admins
             </span>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Stats */}
-        <motion.div variants={containerVariants} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Stats - NO animations */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {statCards.map((stat) => (
-            <motion.div
-              key={stat.label}
-              variants={itemVariants}
-              whileHover={{ y: -4 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              className={`group relative min-h-[44px] overflow-hidden rounded-2xl border bg-gray-800/40 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-indigo-500/40 ${stat.ring}`}
-            >
-              <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity group-hover:opacity-70`} />
-              <div className="relative flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className={`text-2xl font-bold ${stat.accent}`}>{stat.value}</p>
-                  <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
-                </div>
-                <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 ${stat.accent}`}>
-                  <stat.icon className="h-5 w-5" />
-                </span>
-              </div>
-              <p className="relative mt-2 truncate text-[11px] text-gray-500">{stat.hint}</p>
-            </motion.div>
+            <StatCard key={stat.label} stat={stat} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Add Admin Form */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-2xl border border-white/10 bg-gray-800/40 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+        {/* Add Admin Form - NO animations */}
+        <div className="rounded-2xl border border-white/10 bg-gray-800/40 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
             <Plus className="h-5 w-5 text-indigo-400" />
             Add New Admin
@@ -304,16 +404,16 @@ export default function AdminManagementPage() {
               <input
                 type="email"
                 value={newAdminEmail}
-                onChange={(e) => setNewAdminEmail(e.target.value)}
+                onChange={handleEmailChange}
                 placeholder="Enter user email"
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2.5 pl-10 pr-4 text-white placeholder-gray-400 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2.5 pl-10 pr-4 text-white placeholder-gray-400 transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                 required
               />
             </div>
             <button
               type="submit"
               disabled={adding}
-              className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-indigo-900/30 transition-all hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50"
+              className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-indigo-900/30 transition-all duration-150 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50"
             >
               {adding ? (
                 <>
@@ -329,13 +429,10 @@ export default function AdminManagementPage() {
             </button>
           </form>
           <p className="mt-3 text-xs text-gray-500">User must already have an account on the platform.</p>
-        </motion.div>
+        </div>
 
-        {/* Admins List */}
-        <motion.div
-          variants={itemVariants}
-          className="overflow-hidden rounded-2xl border border-white/10 bg-gray-800/40 shadow-2xl backdrop-blur-xl"
-        >
+        {/* Admins List - NO animations */}
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-gray-800/40 shadow-2xl backdrop-blur-xl">
           <div className="flex flex-col gap-3 border-b border-white/10 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-gray-400" />
@@ -345,9 +442,9 @@ export default function AdminManagementPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
               <input
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 placeholder="Search admins..."
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
               />
             </div>
           </div>
@@ -360,66 +457,19 @@ export default function AdminManagementPage() {
           ) : (
             <div className="divide-y divide-white/5">
               {filteredAdmins.map((admin) => (
-                <div
+                <AdminRow
                   key={admin.id}
-                  className="flex flex-col gap-3 p-4 transition-all hover:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 font-bold text-white">
-                      {adminLabel(admin).charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-medium text-white">{adminLabel(admin)}</p>
-                        {admin.isSuperAdmin && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400/20 bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-300">
-                            <Crown className="h-3 w-3" />
-                            Super Admin
-                          </span>
-                        )}
-                      </div>
-                      <p className="truncate text-sm text-gray-400">{admin.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-shrink-0 items-center justify-between gap-3 sm:justify-end">
-                    <span className="text-xs text-gray-500">
-                      Added: {new Date(admin.createdAt).toLocaleDateString()}
-                    </span>
-                    {!admin.isSuperAdmin ? (
-                      <button
-                        onClick={() => handleRemoveAdmin(admin.id)}
-                        disabled={removing === admin.id}
-                        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-50"
-                        title="Remove admin"
-                      >
-                        {removing === admin.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </button>
-                    ) : (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-gray-900/40 px-3 py-2 text-xs text-gray-400"
-                        title="Super admins cannot be removed"
-                      >
-                        <Lock className="h-3.5 w-3.5" />
-                        Protected
-                      </span>
-                    )}
-                  </div>
-                </div>
+                  admin={admin}
+                  onRemove={handleRemoveAdmin}
+                  removing={removing}
+                />
               ))}
             </div>
           )}
-        </motion.div>
+        </div>
 
-        {/* Info Card */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+        {/* Info Card - NO animations */}
+        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="flex items-start gap-3">
             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300">
               <AlertCircle className="h-5 w-5" />
@@ -438,8 +488,8 @@ export default function AdminManagementPage() {
               </ul>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
     </>
   );
 }

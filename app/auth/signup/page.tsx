@@ -11,7 +11,6 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast";
 import {
   Shield,
@@ -122,57 +121,70 @@ function evaluatePassword(password: string): StrengthResult {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.5, ease: "easeOut", staggerChildren: 0.07 },
-  },
-} as const;
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
-} as const;
-
-const backgroundOrbVariants = {
-  animate: {
-    scale: [1, 1.2, 1],
-    opacity: [0.3, 0.5, 0.3],
-    transition: { duration: 8, repeat: Infinity, ease: "easeInOut" as any },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
-const BackgroundOrbs = function BackgroundOrbs() {
+function BackgroundOrbs() {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
+        <div
+          aria-hidden="true"
+          className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-600/25 blur-[120px]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-purple-600/25 blur-[120px]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+            backgroundSize: "48px 48px",
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="pointer-events-none absolute inset-0">
       <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
-      <motion.div
+      <div
         aria-hidden="true"
-        variants={backgroundOrbVariants}
-        animate="animate"
         className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-600/25 blur-[120px]"
       />
-      <motion.div
+      <div
         aria-hidden="true"
-        variants={backgroundOrbVariants}
-        animate="animate"
-        transition={{ duration: 10, delay: 1 }}
         className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-purple-600/25 blur-[120px]"
       />
-      <motion.div
+      <div
         aria-hidden="true"
-        variants={backgroundOrbVariants}
-        animate="animate"
-        transition={{ duration: 12, delay: 2 }}
         className="absolute top-1/2 left-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-500/10 blur-[120px]"
       />
       <div
@@ -186,7 +198,7 @@ const BackgroundOrbs = function BackgroundOrbs() {
       />
     </div>
   );
-};
+}
 
 /* -------------------------------------------------------------------------- */
 /*                            Main Sign Up Form                                */
@@ -194,6 +206,7 @@ const BackgroundOrbs = function BackgroundOrbs() {
 
 function SignUpForm() {
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const [form, setForm] = useState<FormState>({
     name: "",
@@ -208,15 +221,9 @@ function SignUpForm() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [greeting, setGreeting] = useState("Welcome");
-  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     setGreeting(getGreeting());
-    setIsMobile(window.innerWidth < 768);
-    
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const strength = useMemo(
@@ -403,19 +410,11 @@ function SignUpForm() {
 
       <BackgroundOrbs />
 
-      {/* Content */}
+      {/* Content - NO animations */}
       <div className="relative z-10 flex min-h-screen min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="w-full max-w-md"
-        >
-          {/* Brand */}
-          <motion.div
-            variants={itemVariants}
-            className="mb-6 flex flex-col items-center text-center sm:mb-8"
-          >
+        <div className="w-full max-w-md">
+          {/* Brand - NO animations */}
+          <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
             <div className="relative mb-3 sm:mb-4">
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 blur-md opacity-60" />
               <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 shadow-lg shadow-indigo-900/50 sm:h-16 sm:w-16">
@@ -428,11 +427,10 @@ function SignUpForm() {
             <p className="mt-0.5 text-xs text-gray-400 sm:text-sm">
               {greeting} — create your account
             </p>
-          </motion.div>
+          </div>
 
-          {/* Glass card - Mobile optimized */}
-          <motion.div
-            variants={itemVariants}
+          {/* Glass card - NO animations */}
+          <div
             className="rounded-2xl border border-white/10 bg-gray-800/40 p-5 shadow-2xl backdrop-blur-xl sm:p-8"
             style={{
               backdropFilter: isMobile ? "blur(8px)" : "blur(16px)",
@@ -470,7 +468,7 @@ function SignUpForm() {
                     disabled={isSubmitting}
                     aria-invalid={!!errors.name}
                     aria-describedby={errors.name ? "name-error" : undefined}
-                    className={`min-h-[44px] w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
+                    className={`min-h-[44px] w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
                       errors.name
                         ? "border-red-500/60 focus:ring-red-500/50"
                         : "border-white/10 focus:border-indigo-500/60 focus:ring-indigo-500/50"
@@ -506,10 +504,8 @@ function SignUpForm() {
                     onChange={handleChange}
                     disabled={isSubmitting}
                     aria-invalid={!!errors.username}
-                    aria-describedby={
-                      errors.username ? "username-error" : undefined
-                    }
-                    className={`min-h-[44px] w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
+                    aria-describedby={errors.username ? "username-error" : undefined}
+                    className={`min-h-[44px] w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
                       errors.username
                         ? "border-red-500/60 focus:ring-red-500/50"
                         : "border-white/10 focus:border-indigo-500/60 focus:ring-indigo-500/50"
@@ -547,7 +543,7 @@ function SignUpForm() {
                     disabled={isSubmitting}
                     aria-invalid={!!errors.email}
                     aria-describedby={errors.email ? "email-error" : undefined}
-                    className={`min-h-[44px] w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
+                    className={`min-h-[44px] w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
                       errors.email
                         ? "border-red-500/60 focus:ring-red-500/50"
                         : "border-white/10 focus:border-indigo-500/60 focus:ring-indigo-500/50"
@@ -561,7 +557,7 @@ function SignUpForm() {
                 )}
               </div>
 
-              {/* Password - Clean Flex Layout */}
+              {/* Password - Clean Flex Layout - NO animations */}
               <div>
                 <label
                   htmlFor="password"
@@ -594,7 +590,7 @@ function SignUpForm() {
                     disabled={isSubmitting}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
-                    className="flex items-center px-2 text-gray-500 transition hover:text-gray-300 focus:text-indigo-400 focus:outline-none disabled:opacity-60 min-h-[44px] flex-shrink-0 sm:px-3"
+                    className="flex items-center px-2 text-gray-500 transition-colors duration-150 hover:text-gray-300 focus:text-indigo-400 focus:outline-none disabled:opacity-60 min-h-[44px] flex-shrink-0 sm:px-3"
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -604,32 +600,24 @@ function SignUpForm() {
                   </button>
                 </div>
                 
-                {/* Password strength indicator */}
-                <AnimatePresence>
-                  {form.password && !errors.password && (
-                    <motion.div
-                      id="password-strength"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mt-1.5"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        {[0, 1, 2, 3].map((i) => (
-                          <span
-                            key={i}
-                            className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
-                              i < strength.score ? strength.color : "bg-white/10"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <p className={`mt-0.5 text-[10px] font-medium sm:text-xs ${strength.textColor}`}>
-                        Password strength: {strength.label}
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* Password strength indicator - NO animations */}
+                {form.password && !errors.password && (
+                  <div id="password-strength" className="mt-1.5">
+                    <div className="flex items-center gap-1.5">
+                      {[0, 1, 2, 3].map((i) => (
+                        <span
+                          key={i}
+                          className={`h-1.5 flex-1 rounded-full transition-colors duration-200 ${
+                            i < strength.score ? strength.color : "bg-white/10"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <p className={`mt-0.5 text-[10px] font-medium sm:text-xs ${strength.textColor}`}>
+                      Password strength: {strength.label}
+                    </p>
+                  </div>
+                )}
 
                 {errors.password && (
                   <p id="password-error" className="mt-1 text-xs text-red-400">
@@ -638,7 +626,7 @@ function SignUpForm() {
                 )}
               </div>
 
-              {/* Confirm Password - Clean Flex Layout */}
+              {/* Confirm Password - Clean Flex Layout - NO animations */}
               <div>
                 <label
                   htmlFor="confirmPassword"
@@ -671,7 +659,7 @@ function SignUpForm() {
                     disabled={isSubmitting}
                     aria-label={showConfirm ? "Hide password" : "Show password"}
                     aria-pressed={showConfirm}
-                    className="flex items-center px-2 text-gray-500 transition hover:text-gray-300 focus:text-indigo-400 focus:outline-none disabled:opacity-60 min-h-[44px] flex-shrink-0 sm:px-3"
+                    className="flex items-center px-2 text-gray-500 transition-colors duration-150 hover:text-gray-300 focus:text-indigo-400 focus:outline-none disabled:opacity-60 min-h-[44px] flex-shrink-0 sm:px-3"
                   >
                     {showConfirm ? (
                       <EyeOff className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -687,7 +675,7 @@ function SignUpForm() {
                 )}
               </div>
 
-              {/* Terms & Conditions */}
+              {/* Terms & Conditions - NO animations */}
               <div>
                 <label
                   htmlFor="acceptTerms"
@@ -701,23 +689,21 @@ function SignUpForm() {
                     onChange={handleChange}
                     disabled={isSubmitting}
                     aria-invalid={!!errors.acceptTerms}
-                    aria-describedby={
-                      errors.acceptTerms ? "terms-error" : undefined
-                    }
+                    aria-describedby={errors.acceptTerms ? "terms-error" : undefined}
                     className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 rounded border-white/20 bg-gray-900/60 text-indigo-600 accent-indigo-600 focus:ring-2 focus:ring-indigo-500/50 focus:ring-offset-0 sm:h-4 sm:w-4"
                   />
                   <span>
                     I agree to the{" "}
                     <Link
                       href="/terms"
-                      className="font-medium text-indigo-400 transition hover:text-indigo-300"
+                      className="font-medium text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
                     >
                       Terms &amp; Conditions
                     </Link>{" "}
                     and{" "}
                     <Link
                       href="/privacy"
-                      className="font-medium text-indigo-400 transition hover:text-indigo-300"
+                      className="font-medium text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
                     >
                       Privacy Policy
                     </Link>
@@ -731,13 +717,11 @@ function SignUpForm() {
                 )}
               </div>
 
-              {/* Submit */}
-              <motion.button
+              {/* Submit - NO animations */}
+              <button
                 type="submit"
                 disabled={isSubmitting}
-                whileHover={!isSubmitting ? { scale: 1.01 } : undefined}
-                whileTap={!isSubmitting ? { scale: 0.99 } : undefined}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:from-indigo-500 hover:to-purple-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-70"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition-colors duration-150 hover:from-indigo-500 hover:to-purple-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isSubmitting ? (
                   <>
@@ -751,38 +735,33 @@ function SignUpForm() {
                     <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </>
                 )}
-              </motion.button>
+              </button>
             </form>
 
-            {/* Sign in link */}
+            {/* Sign in link - NO animations */}
             <p className="mt-4 text-center text-xs text-gray-400 sm:mt-6 sm:text-sm">
               Already have an account?{" "}
               <Link
                 href="/auth/signin"
-                className="font-semibold text-indigo-400 transition hover:text-indigo-300"
+                className="font-semibold text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
               >
                 Sign in
               </Link>
             </p>
-          </motion.div>
+          </div>
 
-          <motion.p
-            variants={itemVariants}
-            className="mt-3 text-center text-[10px] text-gray-600 sm:mt-4 sm:text-xs"
-          >
+          {/* Footer - NO animations */}
+          <p className="mt-3 text-center text-[10px] text-gray-600 sm:mt-4 sm:text-xs">
             Protected by industry-standard encryption. Your data stays yours.
-          </motion.p>
+          </p>
 
-          {/* Decorative - Premium touch */}
-          <motion.div
-            variants={itemVariants}
-            className="mt-3 flex items-center justify-center gap-1.5 text-[8px] text-gray-700 sm:mt-4 sm:text-[10px]"
-          >
+          {/* Decorative - Premium touch - NO animations */}
+          <div className="mt-3 flex items-center justify-center gap-1.5 text-[8px] text-gray-700 sm:mt-4 sm:text-[10px]">
             <Sparkles className="h-2.5 w-2.5 text-indigo-400/30 sm:h-3 sm:w-3" />
             <span>Secure • Encrypted • Trusted</span>
             <Sparkles className="h-2.5 w-2.5 text-indigo-400/30 sm:h-3 sm:w-3" />
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </div>
     </main>
   );

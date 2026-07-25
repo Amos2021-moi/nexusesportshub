@@ -3,7 +3,6 @@
 import { memo, useEffect, useMemo, useState, type ReactNode, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Trophy,
   Crown,
@@ -67,39 +66,24 @@ const iconMap: Record<string, ReactNode> = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
-  },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
 /*                            Helper Functions                                */
@@ -110,47 +94,74 @@ function winnerName(award: Award) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
-const StatCard = memo(({ stat }: { stat: any }) => (
-  <motion.div
-    variants={statCardVariants}
-    initial="hidden"
-    animate="visible"
-    whileHover="hover"
-    className="will-change-transform"
-  >
-    <div className={`group relative h-full overflow-hidden rounded-2xl border bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-yellow-500/40 ${stat.ring}`}>
-      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-500 group-hover:opacity-70`} />
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-yellow-500/20 blur-3xl" />
+      <div className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-amber-500/15 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           Memoized Components                             */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Stat Card ===
+const StatCard = memo(({ stat }: { stat: any }) => {
+  const Icon = stat.icon;
+  return (
+    <div className={`group relative h-full overflow-hidden rounded-2xl border bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-yellow-500/40 ${stat.ring}`}>
+      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-300 group-hover:opacity-70`} />
       <div className="relative flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className={`text-2xl font-bold ${stat.accent}`}>{stat.value}</p>
           <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
         </div>
         <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 ${stat.accent}`}>
-          <stat.icon className="h-5 w-5" />
+          <Icon className="h-5 w-5" />
         </span>
       </div>
       <p className="relative mt-2 truncate text-[11px] text-gray-500">{stat.hint}</p>
     </div>
-  </motion.div>
-));
+  );
+});
 
 StatCard.displayName = "StatCard";
 
+// === STATIC Award Card ===
 const AwardCard = memo(({ award, onDelete }: { award: Award; onDelete: (id: string) => void }) => {
   const Icon = iconMap[award.icon] || <Award className="h-5 w-5 text-gray-400" />;
   const name = winnerName(award);
+  const handleDelete = useCallback(() => {
+    onDelete(award.id);
+  }, [onDelete, award.id]);
 
   return (
-    <motion.div
-      variants={itemVariants}
-      whileHover={{ y: -3 }}
-      transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-yellow-500/40 sm:p-5"
-    >
-      <div className="pointer-events-none absolute -right-12 -top-12 h-28 w-28 rounded-full bg-yellow-500/10 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-yellow-500/40 sm:p-5">
+      <div className="pointer-events-none absolute -right-12 -top-12 h-28 w-28 rounded-full bg-yellow-500/10 blur-3xl transition-opacity duration-300 group-hover:opacity-100" />
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 gap-4">
           <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-gray-900/60 shadow-lg">
@@ -192,60 +203,27 @@ const AwardCard = memo(({ award, onDelete }: { award: Award; onDelete: (id: stri
         </div>
 
         <button
-          onClick={() => onDelete(award.id)}
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300 transition-all hover:bg-red-500/20 sm:flex-shrink-0"
+          onClick={handleDelete}
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-300 transition-colors duration-150 hover:bg-red-500/20 sm:flex-shrink-0"
           title="Delete award"
         >
           <Trash2 size={18} />
         </button>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
 AwardCard.displayName = "AwardCard";
 
 /* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-yellow-500/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-amber-500/15 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.15]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
-    />
-  </div>
-));
-
-DecorBackground.displayName = "DecorBackground";
-
-/* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function AdminAwardsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [awards, setAwards] = useState<Award[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
@@ -388,14 +366,16 @@ export default function AdminAwardsPage() {
     );
   }, [awards, searchTerm, selectedSeason]);
 
-  const selectedSeasonName =
+  const selectedSeasonName = useMemo(() =>
     selectedSeason === "all"
       ? "All Seasons"
-      : seasons.find((season) => season.id === selectedSeason)?.name || "Selected Season";
+      : seasons.find((season) => season.id === selectedSeason)?.name || "Selected Season",
+    [selectedSeason, seasons]
+  );
 
-  const autoCount = awards.filter((a) => a.isAutoGenerated).length;
-  const manualCount = awards.filter((a) => !a.isAutoGenerated).length;
-  const uniqueWinners = new Set(awards.map((a) => winnerName(a))).size;
+  const autoCount = useMemo(() => awards.filter((a) => a.isAutoGenerated).length, [awards]);
+  const manualCount = useMemo(() => awards.filter((a) => !a.isAutoGenerated).length, [awards]);
+  const uniqueWinners = useMemo(() => new Set(awards.map((a) => winnerName(a))).size, [awards]);
 
   const statCards = useMemo(() => [
     {
@@ -436,11 +416,19 @@ export default function AdminAwardsPage() {
     },
   ], [awards, autoCount, manualCount, uniqueWinners]);
 
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  const handleSeasonChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedSeason(e.target.value);
+  }, []);
+
   if (status === "loading" || loading) {
     return (
       <>
         <DecorBackground />
-        <div className="flex h-64 items-center justify-center">
+        <div className="flex h-64 items-center justify-center px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-yellow-500/20" />
@@ -465,17 +453,9 @@ export default function AdminAwardsPage() {
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-yellow-600/20 via-amber-600/20 to-purple-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-yellow-600/20 via-amber-600/20 to-purple-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-yellow-500/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -486,7 +466,7 @@ export default function AdminAwardsPage() {
                 <h1 className="truncate text-xl font-bold text-white sm:text-2xl">
                   🏅 Awards Management
                 </h1>
-                <p className="mt-0.5 text-xs text-gray-300 sm:text-sm">
+                <p className="mt-0.5 truncate text-xs text-gray-300 sm:text-sm">
                   Manage awards and trophies for each season
                 </p>
               </div>
@@ -496,13 +476,10 @@ export default function AdminAwardsPage() {
               {selectedSeasonName}
             </span>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Controls */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+        {/* Controls - NO animations */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -511,8 +488,8 @@ export default function AdminAwardsPage() {
                   <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                   <select
                     value={selectedSeason}
-                    onChange={(e) => setSelectedSeason(e.target.value)}
-                    className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-white transition-colors focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/30"
+                    onChange={handleSeasonChange}
+                    className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-white transition-colors duration-150 focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/30"
                   >
                     <option value="all">All Seasons</option>
                     {seasons.map((s) => (
@@ -529,9 +506,9 @@ export default function AdminAwardsPage() {
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
                   <input
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={handleSearchChange}
                     placeholder="Search award, winner, season..."
-                    className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-white placeholder-gray-500 transition-colors focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/30"
+                    className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-white placeholder-gray-500 transition-colors duration-150 focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500/30"
                   />
                 </div>
               </div>
@@ -541,16 +518,20 @@ export default function AdminAwardsPage() {
               <button
                 onClick={generateAwards}
                 disabled={generating || selectedSeason === "all"}
-                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-green-900/30 transition-all hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
+                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-green-900/30 transition-all duration-150 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
               >
-                <RefreshCw size={16} className={generating ? "animate-spin" : ""} />
+                {generating ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
                 {generating ? "Generating..." : "Generate Awards"}
               </button>
               {selectedSeason !== "all" && filteredAwards.length > 0 && (
                 <button
                   onClick={regenerateAwards}
                   disabled={generating}
-                  className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-600 to-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-yellow-900/30 transition-all hover:from-yellow-700 hover:to-amber-700 disabled:opacity-50"
+                  className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-yellow-600 to-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-yellow-900/30 transition-all duration-150 hover:from-yellow-700 hover:to-amber-700 disabled:opacity-50"
                 >
                   <Wand2 size={16} />
                   Regenerate
@@ -558,21 +539,18 @@ export default function AdminAwardsPage() {
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Stats */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* Stats - NO animations */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {statCards.map((stat) => (
             <StatCard key={stat.label} stat={stat} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Awards */}
+        {/* Awards - NO animations */}
         {filteredAwards.length === 0 ? (
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 py-12 text-center shadow-2xl backdrop-blur-xl"
-          >
+          <div className="rounded-2xl border border-white/10 bg-white/5 py-12 text-center shadow-2xl backdrop-blur-xl">
             <Award className="mx-auto mb-4 h-16 w-16 text-gray-600" />
             <h3 className="mb-2 text-xl font-semibold text-white">No Awards Yet</h3>
             <p className="px-4 text-gray-400">
@@ -580,9 +558,9 @@ export default function AdminAwardsPage() {
                 ? "No awards match your search."
                 : "Select a season and click Generate Awards to create them automatically."}
             </p>
-          </motion.div>
+          </div>
         ) : (
-          <motion.div variants={containerVariants} className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {filteredAwards.map((award) => (
               <AwardCard
                 key={award.id}
@@ -590,9 +568,9 @@ export default function AdminAwardsPage() {
                 onDelete={deleteAward}
               />
             ))}
-          </motion.div>
+          </div>
         )}
-      </motion.div>
+      </div>
     </>
   );
 }

@@ -49,13 +49,54 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
 
   outputFileTracingIncludes: {
-    '**/*': [
+    '/api/admin/backup/create': [
+      'node_modules/jszip/**/*',
+      'node_modules/@prisma/client/**/*',
+    ],
+    '/api/admin/backup/cron': [
+      'node_modules/jszip/**/*',
+      'node_modules/@prisma/client/**/*',
+    ],
+    '/api/admin/backup/queue': [
       'node_modules/jszip/**/*',
       'node_modules/@prisma/client/**/*',
     ],
   },
 
-  serverExternalPackages: [],
+  outputFileTracingExcludes: {
+    '/api/admin/backup/create': [
+      '**/backup.worker.ts',
+      '**/backups/**',
+    ],
+    '/api/admin/backup/cron': [
+      '**/backup.worker.ts',
+      '**/backups/**',
+    ],
+    '/api/admin/backup/queue': [
+      '**/backup.worker.ts',
+      '**/backups/**',
+    ],
+  },
+
+  // ✅ Add turbopack config (empty for now)
+  turbopack: {},
+
+  // ✅ Only apply webpack config when using webpack
+  webpack: (config: any, { isServer }: { isServer: boolean }) => {
+    // Only apply when using webpack
+    if (isServer && process.env.NEXT_WEBPACK) {
+      config.module = config.module || {};
+      config.module.rules = config.module.rules || [];
+      
+      config.module.rules.push({
+        test: /backup\.worker\.ts$/,
+        use: 'ignore-loader',
+      });
+    }
+    return config;
+  },
+
+  serverExternalPackages: ['jszip', 'crypto', '@vercel/blob'],
   poweredByHeader: false,
 }
 

@@ -1,4 +1,3 @@
-// lib/services/backup.worker.ts
 import { prisma } from "@/lib/prisma";
 import fs from "fs/promises";
 import path from "path";
@@ -6,38 +5,61 @@ import JSZip from "jszip";
 import crypto from "crypto";
 
 const isProduction = process.env.VERCEL === '1';
-let put: any = null;
 
-// ✅ Load Vercel Blob only in production
-if (isProduction) {
-  try {
-    const blob = await import('@vercel/blob');
-    put = blob.put;
-    console.log('✅ Vercel Blob loaded successfully');
-  } catch (error) {
-    console.warn('⚠️ Vercel Blob not available:', error);
+// ✅ Import Vercel Blob dynamically with turbopack ignore
+let put: any = null;
+let del: any = null;
+
+// ✅ Wrap dynamic import in a function to avoid top-level await issues
+async function loadVercelBlob() {
+  if (isProduction) {
+    try {
+      // ✅ Add turbopack ignore comment to prevent tracing issues
+      const blob = await import(/* webpackIgnore: true */ '@vercel/blob');
+      put = blob.put;
+      del = blob.del;
+      console.log('✅ Vercel Blob loaded successfully');
+    } catch (error) {
+      console.warn('⚠️ Vercel Blob not available:', error);
+    }
   }
 }
 
 export class BackupWorker {
   private backupDir: string;
   private encryptionKey: string;
+  private isEncryptionEnabled: boolean;
+  private isBlobLoaded: boolean = false;
 
   constructor() {
+    // ✅ Use a relative path instead of process.cwd() for better tracing
     this.backupDir = path.join(process.cwd(), 'backups');
-    // ✅ Use environment variable for encryption key or generate one
-    this.encryptionKey = process.env.BACKUP_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+    this.encryptionKey = process.env.BACKUP_ENCRYPTION_KEY || '';
+    this.isEncryptionEnabled = !!this.encryptionKey;
+    
+    if (this.isEncryptionEnabled) {
+      console.log('🔐 Backup encryption is ENABLED');
+    } else {
+      console.log('🔓 Backup encryption is DISABLED (no key found)');
+    }
   }
 
   async performBackup(backupId: string, userId: string) {
     try {
       console.log(`📦 Starting backup worker for ${backupId}`);
       console.log(`📍 Environment: ${isProduction ? 'Production (Vercel)' : 'Local'}`);
+      console.log(`🔐 Encryption: ${this.isEncryptionEnabled ? 'Enabled' : 'Disabled'}`);
+
+      // ✅ Load Vercel Blob if needed
+      if (isProduction && !this.isBlobLoaded) {
+        await loadVercelBlob();
+        this.isBlobLoaded = true;
+      }
 
       // ✅ Update status to PROCESSING
       await this.updateBackupStatus(backupId, 'PROCESSING', 5, 'Initializing backup...');
 
-      // ✅ Ensure backup directory exists
+      // ✅ Ensure backup directory exists (for local fallback)
       await fs.mkdir(this.backupDir, { recursive: true });
 
       // ✅ Step 1: Export database
@@ -57,7 +79,7 @@ export class BackupWorker {
           totalRecords: Object.values(dbData).reduce((acc, arr) => acc + (Array.isArray(arr) ? arr.length : 0), 0),
           databaseSize: dbJson.length,
           compression: 'zip',
-          encryption: 'AES-256'
+          encryption: this.isEncryptionEnabled ? 'AES-256-CBC' : 'None',
         }
       };
       const manifestJson = JSON.stringify(manifest, null, 2);
@@ -77,24 +99,34 @@ export class BackupWorker {
       const zipSize = zipBuffer.length;
       console.log(`🗜️ ZIP created: ${zipSize} bytes`);
 
-      // ✅ Step 5: Encrypt the backup
-      await this.updateBackupStatus(backupId, 'PROCESSING', 60, 'Encrypting backup...');
-      const encryptedBuffer = this.encryptBuffer(zipBuffer);
+      let finalBuffer = zipBuffer;
+      let fileExtension = 'zip';
+      let isEncrypted = false;
+
+      // ✅ Step 5: Encrypt the backup (if key is set)
+      if (this.isEncryptionEnabled) {
+        await this.updateBackupStatus(backupId, 'PROCESSING', 60, 'Encrypting backup...');
+        finalBuffer = this.encryptBuffer(zipBuffer);
+        fileExtension = 'encrypted';
+        isEncrypted = true;
+        console.log(`🔐 Backup encrypted: ${finalBuffer.length} bytes`);
+      }
 
       // ✅ Step 6: Upload or save
       await this.updateBackupStatus(backupId, 'PROCESSING', 70, 'Uploading backup...');
       let filePath: string;
+      const fileName = `backup_${backupId}.${fileExtension}`;
 
       if (isProduction && put && process.env.BLOB_READ_WRITE_TOKEN) {
         try {
           console.log('☁️ Uploading to Vercel Blob...');
           const blob = await put(
-            `backups/${backupId}.encrypted`,
-            encryptedBuffer,
+            `backups/${fileName}`,
+            finalBuffer,
             {
               access: 'private',
               addRandomSuffix: false,
-              contentType: 'application/octet-stream',
+              contentType: isEncrypted ? 'application/octet-stream' : 'application/zip',
             }
           );
           filePath = blob.url;
@@ -102,16 +134,16 @@ export class BackupWorker {
         } catch (blobError) {
           console.error('❌ Vercel Blob upload failed:', blobError);
           console.log('📁 Falling back to local storage...');
-          filePath = await this.saveLocal(encryptedBuffer, backupId);
+          filePath = await this.saveLocal(finalBuffer, backupId, fileExtension);
         }
       } else {
         console.log('📁 Saving to local filesystem...');
-        filePath = await this.saveLocal(encryptedBuffer, backupId);
+        filePath = await this.saveLocal(finalBuffer, backupId, fileExtension);
       }
 
       // ✅ Step 7: Verify backup integrity
       await this.updateBackupStatus(backupId, 'PROCESSING', 90, 'Verifying backup...');
-      const verified = await this.verifyBackup(filePath);
+      const verified = await this.verifyBackup(filePath, isEncrypted);
       if (!verified) {
         throw new Error('Backup verification failed');
       }
@@ -123,21 +155,22 @@ export class BackupWorker {
         where: { id: backupId },
         data: {
           status: "COMPLETED",
-          size: encryptedBuffer.length,
+          size: finalBuffer.length,
           filePath: filePath,
           metadata: {
             ...manifest.metadata,
-            encrypted: true,
+            encrypted: isEncrypted,
             verified: true,
-            completedAt: new Date().toISOString()
+            completedAt: new Date().toISOString(),
+            environment: isProduction ? 'production' : 'development',
           }
         }
       });
 
+      console.log(`✅ Backup ${backupId} completed successfully! Size: ${(finalBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+
       // ✅ Step 9: Send notification
       await this.sendNotification(backupId, true);
-
-      console.log(`✅ Backup ${backupId} completed successfully! Size: ${(encryptedBuffer.length / 1024 / 1024).toFixed(2)} MB`);
 
       // ✅ Step 10: Cleanup old backups
       await this.cleanupOldBackups();
@@ -147,7 +180,13 @@ export class BackupWorker {
       
       await prisma.backup.update({
         where: { id: backupId },
-        data: { status: "FAILED" }
+        data: { 
+          status: "FAILED",
+          metadata: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            failedAt: new Date().toISOString()
+          }
+        }
       });
 
       await this.sendNotification(backupId, false);
@@ -173,9 +212,9 @@ export class BackupWorker {
     }
   }
 
-  private async saveLocal(buffer: Buffer, backupId: string): Promise<string> {
+  private async saveLocal(buffer: Buffer, backupId: string, extension: string): Promise<string> {
     try {
-      const zipPath = path.join(this.backupDir, `${backupId}.encrypted`);
+      const zipPath = path.join(this.backupDir, `${backupId}.${extension}`);
       await fs.writeFile(zipPath, buffer);
       console.log(`✅ Backup stored locally: ${zipPath}`);
       return zipPath;
@@ -196,49 +235,7 @@ export class BackupWorker {
       return Buffer.concat([iv, encrypted]);
     } catch (error) {
       console.error('❌ Encryption failed:', error);
-      // If encryption fails, return unencrypted buffer
       return buffer;
-    }
-  }
-
-  private async verifyBackup(filePath: string): Promise<boolean> {
-    try {
-      let buffer: Buffer;
-      
-      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-        // Download from URL
-        const response = await fetch(filePath);
-        const arrayBuffer = await response.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
-      } else {
-        buffer = await fs.readFile(filePath);
-      }
-
-      // ✅ Try to decrypt
-      try {
-        const decrypted = this.decryptBuffer(buffer);
-        const zip = await JSZip.loadAsync(decrypted);
-        
-        // Check required files
-        const requiredFiles = ['database.json', 'manifest.json'];
-        for (const file of requiredFiles) {
-          if (!zip.file(file)) return false;
-        }
-        
-        // Validate JSON
-        const dbFile = zip.file('database.json');
-        if (!dbFile) return false;
-        const dbJson = await dbFile.async('string');
-        JSON.parse(dbJson);
-        return true;
-      } catch {
-        // If decryption fails, try as unencrypted zip
-        const zip = await JSZip.loadAsync(buffer);
-        return zip.file('database.json') !== null;
-      }
-    } catch (error) {
-      console.error('❌ Backup verification failed:', error);
-      return false;
     }
   }
 
@@ -252,6 +249,65 @@ export class BackupWorker {
     } catch (error) {
       console.error('❌ Decryption failed:', error);
       return buffer;
+    }
+  }
+
+  private async verifyBackup(filePath: string, isEncrypted: boolean): Promise<boolean> {
+    try {
+      let buffer: Buffer;
+      
+      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+        // Download from URL
+        const headers: Record<string, string> = {};
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          headers['Authorization'] = `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`;
+        }
+        const response = await fetch(filePath, { headers });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch blob: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+      } else {
+        buffer = await fs.readFile(filePath);
+      }
+
+      // ✅ If encrypted, decrypt first
+      let decryptedBuffer = buffer;
+      if (isEncrypted) {
+        try {
+          decryptedBuffer = this.decryptBuffer(buffer);
+        } catch {
+          // If decryption fails, maybe it's not encrypted
+          decryptedBuffer = buffer;
+        }
+      }
+
+      const zip = await JSZip.loadAsync(decryptedBuffer);
+      
+      // Check required files
+      const requiredFiles = ['database.json', 'manifest.json'];
+      for (const file of requiredFiles) {
+        if (!zip.file(file)) return false;
+      }
+      
+      // Validate JSON
+      const dbFile = zip.file('database.json');
+      if (!dbFile) return false;
+      const dbJson = await dbFile.async('string');
+      JSON.parse(dbJson);
+      
+      // Validate manifest
+      const manifestFile = zip.file('manifest.json');
+      if (manifestFile) {
+        const manifestJson = await manifestFile.async('string');
+        JSON.parse(manifestJson);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Backup verification failed:', error);
+      return false;
     }
   }
 
@@ -292,7 +348,7 @@ export class BackupWorker {
 
       return {
         count: mediaItems.length,
-        items: mediaItems.slice(0, 100), // Limit to 100 media items
+        items: mediaItems.slice(0, 100),
         timestamp: new Date().toISOString()
       };
     } catch (error) {
@@ -308,7 +364,6 @@ export class BackupWorker {
         include: { user: { select: { email: true, name: true } } }
       });
 
-      // ✅ Send email notification to all admins
       const admins = await prisma.user.findMany({
         where: { role: "ADMIN" },
         select: { id: true, email: true, name: true }
@@ -319,7 +374,6 @@ export class BackupWorker {
         ? `Backup ${backupId} completed at ${new Date().toISOString()}. Size: ${(backup?.size || 0) / 1024 / 1024} MB`
         : `Backup ${backupId} failed. Please check the logs.`;
 
-      // ✅ Store notification in database
       for (const admin of admins) {
         await prisma.notification.create({
           data: {
@@ -352,7 +406,7 @@ export class BackupWorker {
       const oldBackups = await prisma.backup.findMany({
         where: {
           createdAt: { lt: cutoffDate },
-          type: "MANUAL"
+          type: { in: ["MANUAL", "AUTO"] }
         }
       });
 
@@ -361,7 +415,11 @@ export class BackupWorker {
           try {
             if (backup.filePath.startsWith('http://') || backup.filePath.startsWith('https://')) {
               // Delete from Vercel Blob
-              await fetch(backup.filePath, { method: 'DELETE' });
+              if (del) {
+                await del(backup.filePath);
+              } else {
+                await fetch(backup.filePath, { method: 'DELETE' });
+              }
             } else {
               await fs.unlink(backup.filePath);
             }
@@ -375,7 +433,7 @@ export class BackupWorker {
       await prisma.backup.deleteMany({
         where: {
           createdAt: { lt: cutoffDate },
-          type: "MANUAL"
+          type: { in: ["MANUAL", "AUTO"] }
         }
       });
     } catch (error) {
@@ -384,4 +442,10 @@ export class BackupWorker {
   }
 }
 
+// ✅ Export a function to create worker instance
+export function createBackupWorker() {
+  return new BackupWorker();
+}
+
+// ✅ Export singleton with lazy initialization
 export const backupWorker = new BackupWorker();

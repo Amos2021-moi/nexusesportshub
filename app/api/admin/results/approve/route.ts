@@ -17,13 +17,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 })
     }
 
-    const { resultId } = await request.json()
-
-    if (!resultId) {
-      return NextResponse.json({ error: "Result ID required" }, { status: 400 })
+    // ✅ Parse body safely
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
 
-    // Get the result with fixture and tournament match
+    const { resultId } = body
+
+    if (!resultId) {
+      return NextResponse.json({ error: "Result ID is required" }, { status: 400 })
+    }
+
+    // ✅ Check if result exists
     const result = await prisma.result.findUnique({
       where: { id: resultId },
       include: { 
@@ -73,14 +81,13 @@ export async function POST(request: Request) {
         }
       })
 
-      // ✅ ADVANCE WINNER TO NEXT ROUND using nextMatchId
+      // ✅ ADVANCE WINNER TO NEXT ROUND
       if (winnerId && match.nextMatchId) {
         const nextMatch = await prisma.tournamentMatch.findUnique({
           where: { id: match.nextMatchId }
         })
 
         if (nextMatch) {
-          // Determine if this winner goes to home or away
           const isHomeSlot = match.matchNumber % 2 === 1
           
           if (isHomeSlot && !nextMatch.homePlayerId) {
@@ -95,7 +102,6 @@ export async function POST(request: Request) {
             })
           }
 
-          // Check if both players are now assigned
           const updatedNextMatch = await prisma.tournamentMatch.findUnique({
             where: { id: nextMatch.id }
           })
@@ -128,12 +134,10 @@ export async function POST(request: Request) {
         data: { approved: true }
       })
 
-      // ✅ SEND EMAIL NOTIFICATIONS FOR TOURNAMENT
+      // ✅ SEND NOTIFICATIONS
       const homeName = match.homePlayer?.profile?.username || match.homePlayer?.name || "Home Player"
       const awayName = match.awayPlayer?.profile?.username || match.awayPlayer?.name || "Away Player"
-      const winnerName = winnerId === match.homePlayerId ? homeName : awayName
 
-      // Send to home player
       if (match.homePlayerId) {
         await notificationWithEmailService.sendResultNotification(match.homePlayerId, {
           homePlayer: homeName,
@@ -144,7 +148,6 @@ export async function POST(request: Request) {
         })
       }
 
-      // Send to away player
       if (match.awayPlayerId) {
         await notificationWithEmailService.sendResultNotification(match.awayPlayerId, {
           homePlayer: homeName,
@@ -228,6 +231,20 @@ export async function POST(request: Request) {
           points: { increment: homePoints }
         }
       })
+    } else {
+      await prisma.leagueEntry.create({
+        data: {
+          seasonId: seasonId,
+          playerId: fixture.homePlayerId,
+          played: 1,
+          wins: homePoints === 3 ? 1 : 0,
+          draws: homePoints === 1 ? 1 : 0,
+          losses: homePoints === 0 ? 1 : 0,
+          goalsFor: result.homeScore,
+          goalsAgainst: result.awayScore,
+          points: homePoints
+        }
+      })
     }
 
     if (awayEntry) {
@@ -241,6 +258,20 @@ export async function POST(request: Request) {
           goalsFor: { increment: result.awayScore },
           goalsAgainst: { increment: result.homeScore },
           points: { increment: awayPoints }
+        }
+      })
+    } else {
+      await prisma.leagueEntry.create({
+        data: {
+          seasonId: seasonId,
+          playerId: fixture.awayPlayerId,
+          played: 1,
+          wins: awayPoints === 3 ? 1 : 0,
+          draws: awayPoints === 1 ? 1 : 0,
+          losses: awayPoints === 0 ? 1 : 0,
+          goalsFor: result.awayScore,
+          goalsAgainst: result.homeScore,
+          points: awayPoints
         }
       })
     }
@@ -270,7 +301,7 @@ export async function POST(request: Request) {
       }
     })
 
-    // 6. Send notifications (In-App)
+    // 6. Send notifications
     const winner = result.homeScore > result.awayScore ? fixture.homePlayer : result.awayScore > result.homeScore ? fixture.awayPlayer : null
     const winnerName = winner?.profile?.username || winner?.name || "No one (Draw)"
     const homePlayerName = fixture.homePlayer.profile?.username ?? fixture.homePlayer.name ?? "Home Player"
@@ -283,19 +314,27 @@ export async function POST(request: Request) {
           title: "✅ Result Approved!",
           message: `Your match vs ${awayPlayerName} (${result.homeScore}-${result.awayScore}) has been approved. ${winnerName} won!`,
           type: "RESULT_APPROVED",
-          link: `/matches/${result.fixtureId}`
+          link: `/matches/${result.fixtureId}`,
+          read: false,
+          priority: 50,
+          priorityLevel: "MEDIUM",
+          channel: "IN_APP"
         },
         {
           userId: fixture.awayPlayerId,
           title: "✅ Result Approved!",
           message: `Your match vs ${homePlayerName} (${result.homeScore}-${result.awayScore}) has been approved. ${winnerName} won!`,
           type: "RESULT_APPROVED",
-          link: `/matches/${result.fixtureId}`
+          link: `/matches/${result.fixtureId}`,
+          read: false,
+          priority: 50,
+          priorityLevel: "MEDIUM",
+          channel: "IN_APP"
         }
       ]
     })
 
-    // ✅ SEND EMAIL NOTIFICATIONS FOR LEAGUE
+    // ✅ SEND EMAIL NOTIFICATIONS
     await notificationWithEmailService.sendResultNotification(fixture.homePlayerId, {
       homePlayer: homePlayerName,
       awayPlayer: awayPlayerName,

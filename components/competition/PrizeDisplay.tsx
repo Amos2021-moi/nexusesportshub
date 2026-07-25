@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { useState, useEffect, useCallback, memo } from "react";
 import {
   Trophy,
   Crown,
@@ -24,6 +23,7 @@ import {
   Zap,
   CheckCircle,
   Clock,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -61,52 +61,31 @@ interface PrizeDisplayProps {
   className?: string;
 }
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
-  },
-};
+/* -------------------------------------------------------------------------- */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.45, ease: "easeOut" },
-  },
-};
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
 
 function formatCurrency(amount: number): string {
   return `KES ${amount.toLocaleString()}`;
-}
-
-function ProgressBar({
-  percentage,
-  color,
-  label,
-}: {
-  percentage: number;
-  color: string;
-  label: string;
-}) {
-  return (
-    <div className="w-full">
-      <div className="mb-0.5 flex justify-between text-xs">
-        <span className="text-gray-400">{label}</span>
-        <span className="font-medium text-gray-300">{percentage}%</span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-700">
-        <motion.div
-          className={`h-full rounded-full ${color}`}
-          initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        />
-      </div>
-    </div>
-  );
 }
 
 function getRankEmoji(rank: number): string {
@@ -123,12 +102,104 @@ function getRankColor(rank: number): string {
   return "text-white";
 }
 
+// === STATIC Progress Bar ===
+const ProgressBar = memo(({
+  percentage,
+  color,
+  label,
+}: {
+  percentage: number;
+  color: string;
+  label: string;
+}) => {
+  return (
+    <div className="w-full">
+      <div className="mb-0.5 flex justify-between text-xs">
+        <span className="text-gray-400">{label}</span>
+        <span className="font-medium text-gray-300">{percentage}%</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-700">
+        <div
+          className={`h-full rounded-full ${color} transition-all duration-300`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+    </div>
+  );
+});
+
+ProgressBar.displayName = "ProgressBar";
+
+// === STATIC Prize Card ===
+const PrizeCard = memo(({ prize, index }: { prize: any; index: number }) => {
+  const Icon = prize.icon;
+  return (
+    <div className={`rounded-xl border p-4 ${prize.bg}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <Icon className={`h-5 w-5 ${prize.color}`} />
+          <span className="text-sm font-medium text-white">{prize.label}</span>
+          {prize.label === "Top Scorer" && prize.topScorer && (
+            <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-300">
+              👑 {prize.topScorer.name} ({prize.topScorer.goals} goals)
+            </span>
+          )}
+        </div>
+        <span className={`text-lg font-bold ${prize.color}`}>
+          {formatCurrency(prize.amount)}
+        </span>
+      </div>
+      <ProgressBar
+        percentage={prize.percentage}
+        color={prize.progressColor}
+        label={`${prize.percentage}%`}
+      />
+    </div>
+  );
+});
+
+PrizeCard.displayName = "PrizeCard";
+
+// === STATIC Stat Box ===
+const StatBox = memo(({ 
+  icon: Icon, 
+  label, 
+  value, 
+  color = "text-white",
+  emoji,
+}: {
+  icon?: any;
+  label: string;
+  value: string | number;
+  color?: string;
+  emoji?: string;
+}) => (
+  <div className="rounded-xl border border-white/10 bg-gray-900/40 p-3 text-center">
+    <div className="flex items-center justify-center gap-1">
+      {emoji ? (
+        <span className="text-2xl font-bold">{emoji}</span>
+      ) : Icon ? (
+        <Icon className={`h-5 w-5 ${color}`} />
+      ) : null}
+      <span className={`text-2xl font-bold ${color}`}>{value}</span>
+    </div>
+    <p className="text-xs text-gray-400">{label}</p>
+  </div>
+));
+
+StatBox.displayName = "StatBox";
+
+/* -------------------------------------------------------------------------- */
+/*                               Main Component                               */
+/* -------------------------------------------------------------------------- */
+
 export default function PrizeDisplay({
   compact = false,
   showDetails = true,
   className = "",
 }: PrizeDisplayProps) {
   const { data: session } = useSession();
+  const isMobile = useIsMobile();
   const [data, setData] = useState<PrizeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -142,18 +213,6 @@ export default function PrizeDisplay({
       const res = await fetch("/api/competition/prize");
       if (!res.ok) throw new Error("Failed to fetch prize data");
       const data = await res.json();
-
-      console.log("📊 Prize API Response:", {
-        totalPrizePool: data.totalPrizePool,
-        entryFee: data.entryFee,
-        registeredPlayers: data.registeredPlayers,
-        breakdown: data.breakdown,
-        champion: data.breakdown?.champion,
-        runnerUp: data.breakdown?.runnerUp,
-        topScorer: data.breakdown?.topScorer,
-        reserve: data.breakdown?.platformReserve,
-      });
-
       setData(data);
     } catch (error) {
       console.error("Error fetching prize data:", error);
@@ -162,18 +221,17 @@ export default function PrizeDisplay({
     }
   }
 
+  const handleToggleExpand = useCallback(() => {
+    setExpanded(prev => !prev);
+  }, []);
+
   if (loading) {
     return (
       <div
         className={`rounded-2xl border border-white/10 bg-gray-800/40 p-4 backdrop-blur-xl ${className}`}
       >
-        <div className="space-y-3">
-          <div className="h-6 w-32 animate-pulse rounded-lg bg-gray-700/50" />
-          <div className="h-10 w-40 animate-pulse rounded-lg bg-gray-700/50" />
-          <div className="space-y-2">
-            <div className="h-4 w-full animate-pulse rounded-lg bg-gray-700/50" />
-            <div className="h-4 w-3/4 animate-pulse rounded-lg bg-gray-700/50" />
-          </div>
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
         </div>
       </div>
     );
@@ -191,7 +249,7 @@ export default function PrizeDisplay({
     );
   }
 
-  // ✅ If free season (entryFee = 0)
+  // Free season
   if (data.entryFee === 0) {
     return (
       <div
@@ -209,7 +267,7 @@ export default function PrizeDisplay({
     );
   }
 
-  // ✅ If waiting for players
+  // Waiting for players
   if (data.registeredPlayers === 0) {
     return (
       <div
@@ -250,6 +308,7 @@ export default function PrizeDisplay({
       color: "text-blue-400",
       bg: "bg-blue-500/10 border-blue-500/20",
       progressColor: "bg-blue-400",
+      topScorer: data.topScorer,
       ...data.breakdown.topScorer,
     },
     {
@@ -262,14 +321,10 @@ export default function PrizeDisplay({
     },
   ];
 
-  // ✅ Compact view for dashboard
+  // Compact view
   if (compact) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={`rounded-2xl border border-white/10 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 p-4 backdrop-blur-xl transition-all hover:border-indigo-500/40 ${className}`}
-      >
+      <div className={`rounded-2xl border border-white/10 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-pink-500/10 p-4 backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/40 ${className}`}>
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -327,27 +382,19 @@ export default function PrizeDisplay({
 
         <Link
           href="/dashboard/prize"
-          className="mt-3 inline-flex items-center gap-1 text-xs text-indigo-400 transition-colors hover:text-indigo-300"
+          className="mt-3 inline-flex items-center gap-1 text-xs text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
         >
           View Full Breakdown <ArrowRight className="h-3 w-3" />
         </Link>
-      </motion.div>
+      </div>
     );
   }
 
-  // ✅ Full view for prize page
+  // Full view
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className={`space-y-6 ${className}`}
-    >
-      {/* Header */}
-      <motion.div
-        variants={itemVariants}
-        className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/30 via-purple-600/30 to-pink-600/30 p-6 shadow-2xl backdrop-blur-xl"
-      >
+    <div className={`space-y-6 ${className}`}>
+      {/* Header - NO animations */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/30 via-purple-600/30 to-pink-600/30 p-6 shadow-2xl backdrop-blur-xl">
         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
         <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-pink-500/20 blur-3xl" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
@@ -377,106 +424,60 @@ export default function PrizeDisplay({
             <p className="text-xs text-gray-500">Total Prize Money</p>
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Prize Breakdown */}
-      <motion.div
-        variants={itemVariants}
-        className="rounded-2xl border border-white/10 bg-gray-800/40 p-6 shadow-2xl backdrop-blur-xl"
-      >
+      {/* Prize Breakdown - NO animations */}
+      <div className="rounded-2xl border border-white/10 bg-gray-800/40 p-6 shadow-2xl backdrop-blur-xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-white">
             <Award className="h-5 w-5 text-yellow-400" />
             Prize Distribution
           </h3>
           <button
-            onClick={() => setExpanded(!expanded)}
-            className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-white/10 bg-gray-900/40 text-gray-400 transition-all hover:bg-white/5 hover:text-white"
+            onClick={handleToggleExpand}
+            className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-white/10 bg-gray-900/40 text-gray-400 transition-colors duration-150 hover:bg-white/5 hover:text-white"
           >
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
         </div>
 
         <div className="space-y-3">
-          {prizeBreakdowns.map((prize, index) => {
-            const Icon = prize.icon;
-            return (
-              <motion.div
-                key={prize.label}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.08 }}
-                className={`rounded-xl border p-4 ${prize.bg}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Icon className={`h-5 w-5 ${prize.color}`} />
-                    <span className="text-sm font-medium text-white">{prize.label}</span>
-                    {prize.label === "Top Scorer" && data.topScorer && (
-                      <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-300">
-                        👑 {data.topScorer.name} ({data.topScorer.goals} goals)
-                      </span>
-                    )}
-                  </div>
-                  <span className={`text-lg font-bold ${prize.color}`}>
-                    {formatCurrency(prize.amount)}
-                  </span>
-                </div>
-                <ProgressBar
-                  percentage={prize.percentage}
-                  color={prize.progressColor}
-                  label={`${prize.percentage}%`}
-                />
-              </motion.div>
-            );
-          })}
+          {prizeBreakdowns.map((prize, index) => (
+            <PrizeCard key={prize.label} prize={prize} index={index} />
+          ))}
         </div>
-      </motion.div>
+      </div>
 
-      {/* Player Position */}
+      {/* Player Position - NO animations */}
       {data.playerPosition && (
-        <motion.div
-          variants={itemVariants}
-          className="rounded-2xl border border-white/10 bg-gray-800/40 p-6 shadow-2xl backdrop-blur-xl"
-        >
+        <div className="rounded-2xl border border-white/10 bg-gray-800/40 p-6 shadow-2xl backdrop-blur-xl">
           <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
             <TrendingUp className="h-5 w-5 text-green-400" />
             Your Position
           </h3>
 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-xl border border-white/10 bg-gray-900/40 p-3 text-center">
-              <div className="flex items-center justify-center gap-1">
-                <span className={`text-2xl font-bold ${getRankColor(data.playerPosition.rank)}`}>
-                  {getRankEmoji(data.playerPosition.rank)}
-                </span>
-              </div>
-              <p className="text-xs text-gray-400">Rank</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-gray-900/40 p-3 text-center">
-              <p className="text-2xl font-bold text-white">{data.playerPosition.points}</p>
-              <p className="text-xs text-gray-400">Points</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-gray-900/40 p-3 text-center">
-              <p className="text-2xl font-bold text-yellow-400">
-                {formatCurrency(data.playerPosition.potentialWinnings)}
-              </p>
-              <p className="text-xs text-gray-400">Potential Winnings</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-gray-900/40 p-3 text-center">
-              <p className="text-2xl font-bold text-blue-400">
-                {data.playerPosition.isTopScorer ? "👑" : "—"}
-              </p>
-              <p className="text-xs text-gray-400">Top Scorer</p>
-            </div>
+            <StatBox
+              label="Rank"
+              value={getRankEmoji(data.playerPosition.rank)}
+              color={getRankColor(data.playerPosition.rank)}
+              emoji={getRankEmoji(data.playerPosition.rank)}
+            />
+            <StatBox label="Points" value={data.playerPosition.points} />
+            <StatBox
+              label="Potential Winnings"
+              value={formatCurrency(data.playerPosition.potentialWinnings)}
+              color="text-yellow-400"
+            />
+            <StatBox
+              label="Top Scorer"
+              value={data.playerPosition.isTopScorer ? "👑" : "—"}
+              color="text-blue-400"
+            />
           </div>
 
           {data.playerPosition.currentReward > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 rounded-xl border border-green-500/20 bg-green-500/10 p-4 text-center"
-            >
+            <div className="mt-4 rounded-xl border border-green-500/20 bg-green-500/10 p-4 text-center">
               <div className="flex items-center justify-center gap-2">
                 <Zap className="h-5 w-5 text-green-400" />
                 <p className="text-sm font-medium text-green-400">
@@ -493,16 +494,13 @@ export default function PrizeDisplay({
                   ? "Stay in the top 3!"
                   : "Keep climbing the rankings!"}
               </p>
-            </motion.div>
+            </div>
           )}
-        </motion.div>
+        </div>
       )}
 
-      {/* Summary Bar */}
-      <motion.div
-        variants={itemVariants}
-        className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-gray-800/40 p-4 shadow-2xl backdrop-blur-xl"
-      >
+      {/* Summary Bar - NO animations */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-gray-800/40 p-4 shadow-2xl backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-gray-400" />
@@ -518,7 +516,7 @@ export default function PrizeDisplay({
           <Star className="h-4 w-4 text-yellow-400" />
           <span className="text-sm text-gray-400">{data.totalPlayers} total players</span>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }

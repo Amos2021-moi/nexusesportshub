@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo,memo } from "react";
+import { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useSession } from "next-auth/react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
   BellDot,
@@ -133,9 +132,63 @@ function getTimeAgo(date: string): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Background - NO ANIMATIONS               */
+/* -------------------------------------------------------------------------- */
+
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
+      <div className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-pink-500/10 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage:
+            "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Notification Card ===
 const NotificationCard = memo(({ 
   notification, 
   onMarkRead, 
@@ -147,21 +200,30 @@ const NotificationCard = memo(({
   onDelete: (id: string) => void;
   isMarking: string | null;
 }) => {
+  const isMobile = useIsMobile();
   const Icon = getIcon(notification.type);
   const config = priorityConfig[notification.priorityLevel];
   const isUnread = !notification.read;
 
+  const handleMarkRead = useCallback(() => {
+    onMarkRead(notification.id);
+  }, [onMarkRead, notification.id]);
+
+  const handleDelete = useCallback(() => {
+    onDelete(notification.id);
+  }, [onDelete, notification.id]);
+
+  const hoverClass = isMobile ? "" : isUnread 
+    ? "hover:border-indigo-500/40" 
+    : "hover:border-white/20";
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`rounded-2xl border p-5 transition-colors ${
-        isUnread
-          ? "border-indigo-500/20 bg-indigo-500/5 hover:border-indigo-500/40"
-          : "border-white/10 bg-white/5 hover:border-white/20"
-      }`}
-    >
-      <div className="flex items-start gap-4">
+    <div className={`rounded-2xl border p-4 transition-colors duration-150 sm:p-5 ${
+      isUnread
+        ? `border-indigo-500/20 bg-indigo-500/5 ${hoverClass}`
+        : `border-white/10 bg-white/5 ${hoverClass}`
+    }`}>
+      <div className="flex items-start gap-3 sm:gap-4">
         <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${config.bg} ${config.ring} ring-1`}>
           <Icon className={`h-5 w-5 ${config.color}`} />
         </div>
@@ -169,7 +231,7 @@ const NotificationCard = memo(({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold text-white">{notification.title}</h3>
+              <h3 className="font-semibold text-white text-sm sm:text-base">{notification.title}</h3>
               {isUnread && (
                 <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
                   New
@@ -183,7 +245,7 @@ const NotificationCard = memo(({
 
           <p className="mt-1 text-sm text-gray-400">{notification.message}</p>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+          <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
             <span className={`flex items-center gap-1 font-medium ${config.color}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${config.color.replace("text-", "bg-")}`} />
               {config.label} • {notification.priority}% priority
@@ -196,12 +258,12 @@ const NotificationCard = memo(({
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 sm:mt-4 flex flex-wrap gap-2">
             {isUnread && (
               <button
-                onClick={() => onMarkRead(notification.id)}
+                onClick={handleMarkRead}
                 disabled={isMarking === notification.id}
-                className="flex min-h-[32px] items-center gap-1.5 rounded-lg bg-indigo-500/20 px-3 py-1 text-xs text-indigo-300 transition-colors hover:bg-indigo-500/30 disabled:opacity-50"
+                className="flex min-h-[32px] items-center gap-1.5 rounded-lg bg-indigo-500/20 px-3 py-1 text-xs text-indigo-300 transition-colors duration-150 hover:bg-indigo-500/30 disabled:opacity-50"
               >
                 {isMarking === notification.id ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -214,14 +276,14 @@ const NotificationCard = memo(({
             {notification.link && (
               <Link
                 href={notification.link}
-                className="flex min-h-[32px] items-center gap-1.5 rounded-lg bg-gray-700/50 px-3 py-1 text-xs text-gray-300 transition-colors hover:bg-gray-600/50 hover:text-white"
+                className="flex min-h-[32px] items-center gap-1.5 rounded-lg bg-gray-700/50 px-3 py-1 text-xs text-gray-300 transition-colors duration-150 hover:bg-gray-600/50 hover:text-white"
               >
                 View <ChevronRight className="h-3 w-3" />
               </Link>
             )}
             <button
-              onClick={() => onDelete(notification.id)}
-              className="flex min-h-[32px] items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-1 text-xs text-red-400 transition-colors hover:bg-red-500/20"
+              onClick={handleDelete}
+              className="flex min-h-[32px] items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-1 text-xs text-red-400 transition-colors duration-150 hover:bg-red-500/20"
             >
               <Trash2 className="h-3 w-3" />
               Delete
@@ -229,12 +291,13 @@ const NotificationCard = memo(({
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
 NotificationCard.displayName = "NotificationCard";
 
+// === STATIC Filter Button ===
 const FilterButton = memo(({ 
   value, 
   label, 
@@ -250,7 +313,7 @@ const FilterButton = memo(({
 }) => (
   <button
     onClick={onClick}
-    className={`flex min-h-[36px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+    className={`flex min-h-[36px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
       isActive
         ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/30"
         : "text-gray-400 hover:bg-white/5 hover:text-white"
@@ -270,46 +333,12 @@ const FilterButton = memo(({
 FilterButton.displayName = "FilterButton";
 
 /* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-    <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-pink-500/10 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.03]"
-      style={{
-        backgroundImage:
-          "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-        backgroundSize: "60px 60px",
-      }}
-    />
-  </div>
-));
-
-DecorBackground.displayName = "DecorBackground";
-
-/* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function NotificationCenterPage() {
   const { data: session } = useSession();
+  const isMobile = useIsMobile();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -363,7 +392,7 @@ export default function NotificationCenterPage() {
     } finally {
       setMarkingId(null);
     }
-  }, []);
+  }, [fetchNotifications]);
 
   const markAllAsRead = useCallback(async () => {
     setMarkingAll(true);
@@ -381,7 +410,7 @@ export default function NotificationCenterPage() {
     } finally {
       setMarkingAll(false);
     }
-  }, []);
+  }, [fetchNotifications]);
 
   const deleteNotification = useCallback(async (notificationId: string) => {
     if (!confirm("Delete this notification?")) return;
@@ -395,6 +424,14 @@ export default function NotificationCenterPage() {
       console.error("Error deleting notification:", error);
       toast.error("Failed to delete");
     }
+  }, [fetchNotifications]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  const handleFilterChange = useCallback((value: "ALL" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW") => {
+    setFilter(value);
   }, []);
 
   const filteredNotifications = useMemo(() => {
@@ -418,7 +455,7 @@ export default function NotificationCenterPage() {
     return (
       <>
         <DecorBackground />
-        <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex min-h-[400px] items-center justify-center px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20" />
@@ -437,27 +474,27 @@ export default function NotificationCenterPage() {
   }
 
   return (
-    <div className="relative">
+    <>
       <DecorBackground />
-      <div className="space-y-5 will-change-transform sm:space-y-6">
-        {/* Header */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-6 shadow-2xl backdrop-blur-xl">
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/30">
-                <BellRing className="h-6 w-6 text-white" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/30 sm:h-12 sm:w-12">
+                <BellRing className="h-5 w-5 text-white sm:h-6 sm:w-6" />
               </div>
               <div>
-                <h1 className="flex items-center gap-2 text-2xl font-bold text-white">
+                <h1 className="flex items-center gap-2 text-xl font-bold text-white sm:text-2xl">
                   🔔 Notifications
                   {counts.total > 0 && (
-                    <span className="rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[10px] font-medium text-indigo-300">
+                    <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
                       {counts.total}
                     </span>
                   )}
                 </h1>
-                <p className="text-sm text-gray-400">
+                <p className="text-xs text-gray-400 sm:text-sm">
                   {counts.critical > 0 && `${counts.critical} critical · `}
                   {counts.high > 0 && `${counts.high} high · `}
                   {counts.medium > 0 && `${counts.medium} medium · `}
@@ -471,7 +508,7 @@ export default function NotificationCenterPage() {
                 <button
                   onClick={markAllAsRead}
                   disabled={markingAll}
-                  className="flex min-h-[36px] items-center gap-1.5 rounded-lg bg-indigo-600/20 px-3 py-1.5 text-xs text-indigo-300 transition-colors hover:bg-indigo-600/30 disabled:opacity-50"
+                  className="flex min-h-[36px] items-center gap-1.5 rounded-lg bg-indigo-600/20 px-3 py-1.5 text-xs text-indigo-300 transition-colors duration-150 hover:bg-indigo-600/30 disabled:opacity-50"
                 >
                   {markingAll ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -484,7 +521,7 @@ export default function NotificationCenterPage() {
               <button
                 onClick={fetchNotifications}
                 disabled={refreshing}
-                className="flex min-h-[36px] items-center gap-1.5 rounded-lg bg-gray-700/50 px-3 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-600/50 hover:text-white disabled:opacity-50"
+                className="flex min-h-[36px] items-center gap-1.5 rounded-lg bg-gray-700/50 px-3 py-1.5 text-xs text-gray-400 transition-colors duration-150 hover:bg-gray-600/50 hover:text-white disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
                 Refresh
@@ -493,8 +530,8 @@ export default function NotificationCenterPage() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl">
+        {/* Filters - NO animations */}
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 shadow-2xl backdrop-blur-xl sm:p-4">
           <div className="flex flex-wrap items-center gap-1.5">
             {filterButtons.map((btn) => (
               <FilterButton
@@ -503,7 +540,7 @@ export default function NotificationCenterPage() {
                 label={btn.label}
                 count={btn.count}
                 isActive={filter === btn.value}
-                onClick={() => setFilter(btn.value as any)}
+                onClick={() => handleFilterChange(btn.value as any)}
               />
             ))}
           </div>
@@ -513,13 +550,13 @@ export default function NotificationCenterPage() {
               type="text"
               placeholder="Search notifications..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="min-h-[36px] w-full rounded-lg border border-white/10 bg-gray-900/50 pl-8 pr-3 text-xs text-white placeholder-gray-500 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 sm:w-48"
+              onChange={handleSearchChange}
+              className="min-h-[36px] w-full rounded-lg border border-white/10 bg-gray-900/50 pl-8 pr-3 text-xs text-white placeholder-gray-500 transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 sm:w-48"
             />
           </div>
         </div>
 
-        {/* Notification List */}
+        {/* Notification List - NO animations */}
         {filteredNotifications.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 py-12 text-center shadow-2xl backdrop-blur-xl">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-700/30">
@@ -546,6 +583,6 @@ export default function NotificationCenterPage() {
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

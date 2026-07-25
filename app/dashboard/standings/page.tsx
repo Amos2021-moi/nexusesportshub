@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback,memo } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import LeagueTable from "@/components/league/LeagueTable";
 import Link from "next/link";
 import {
@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { SkeletonLeagueTable, Skeleton } from "@/components/ui/Skeleton";
 import PrizeDisplay from "@/components/competition/PrizeDisplay";
-import { motion, type Variants } from "framer-motion";
 
 interface Season {
   id: string;
@@ -35,23 +34,62 @@ interface Season {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.05, delayChildren: 0.03 } },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
+      <div className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-yellow-500/10 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Season Selector ===
 const SeasonSelector = memo(({
   seasons,
   selectedSeason,
@@ -62,86 +100,54 @@ const SeasonSelector = memo(({
   selectedSeason: string;
   onSeasonChange: (id: string) => void;
   activeSeason?: Season;
-}) => (
-  <motion.div
-    variants={itemVariants}
-    className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
-  >
-    <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
-      <Calendar className="h-4 w-4" />
-      Season:
-    </label>
-    <div className="relative flex-1 min-w-[140px] sm:flex-none">
-      <select
-        value={selectedSeason}
-        onChange={(e) => onSeasonChange(e.target.value)}
-        className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2 pr-10 text-sm text-white transition focus:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-      >
-        {seasons.map((season) => (
-          <option key={season.id} value={season.id}>
-            {season.name} {season.isActive && "⭐ (Active)"}
-          </option>
-        ))}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-    </div>
+}) => {
+  const isMobile = useIsMobile();
+  
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/30">
+      <label className="flex items-center gap-2 text-sm font-medium text-gray-400">
+        <Calendar className="h-4 w-4" />
+        Season:
+      </label>
+      <div className="relative flex-1 min-w-[140px] sm:flex-none">
+        <select
+          value={selectedSeason}
+          onChange={(e) => onSeasonChange(e.target.value)}
+          className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2 pr-10 text-sm text-white transition-colors duration-150 focus:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+        >
+          {seasons.map((season) => (
+            <option key={season.id} value={season.id}>
+              {season.name} {season.isActive && "⭐ (Active)"}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+      </div>
 
-    {activeSeason?.isActive && (
-      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2.5 py-1 text-xs font-semibold text-yellow-300 ring-1 ring-yellow-500/30">
-        <Star size={12} className="fill-yellow-400 text-yellow-400" />
-        Active
-      </span>
-    )}
+      {activeSeason?.isActive && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2.5 py-1 text-xs font-semibold text-yellow-300 ring-1 ring-yellow-500/30">
+          <Star size={12} className="fill-yellow-400 text-yellow-400" />
+          Active
+        </span>
+      )}
 
-    <div className="flex-1 hidden sm:block" />
-    <div className="flex items-center gap-2 text-xs text-gray-500">
-      <TrendingUp className="h-4 w-4" />
-      <span>Last updated: {new Date().toLocaleDateString()}</span>
+      <div className="flex-1 hidden sm:block" />
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <TrendingUp className="h-4 w-4" />
+        <span>Last updated: {new Date().toLocaleDateString()}</span>
+      </div>
     </div>
-  </motion.div>
-));
+  );
+});
 
 SeasonSelector.displayName = "SeasonSelector";
 
 /* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-yellow-500/10 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.15]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
-    />
-  </div>
-));
-
-DecorBackground.displayName = "DecorBackground";
-
-/* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function StandingsPage() {
+  const isMobile = useIsMobile();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -205,11 +211,16 @@ export default function StandingsPage() {
     [seasons, selectedSeason]
   );
 
+  const handleSeasonChange = useCallback((id: string) => {
+    setSelectedSeason(id);
+    checkPrizeEligibility();
+  }, [checkPrizeEligibility]);
+
   if (loading) {
     return (
       <>
         <DecorBackground />
-        <div className="space-y-5 sm:space-y-6">
+        <div className="space-y-5 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
           <div className="flex items-start gap-3">
             <Skeleton variant="avatar" className="h-12 w-12" />
             <div>
@@ -224,16 +235,11 @@ export default function StandingsPage() {
   }
 
   return (
-    <div className="relative">
+    <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div variants={itemVariants} className="flex items-start gap-3">
+      <div className="space-y-5 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="flex items-start gap-3">
           <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-yellow-500 to-orange-500 shadow-lg shadow-orange-500/30">
             <Trophy className="h-6 w-6 text-white" />
           </span>
@@ -241,14 +247,11 @@ export default function StandingsPage() {
             <h1 className="text-2xl font-bold text-white sm:text-3xl">🏆 League Standings</h1>
             <p className="text-gray-400 mt-1">Premier League style rankings</p>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Privacy Warning */}
+        {/* Privacy Warning - NO animations */}
         {!privacySettings.showStats && (
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4 backdrop-blur-xl"
-          >
+          <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4 backdrop-blur-xl">
             <div className="flex items-start gap-3">
               <EyeOff className="mt-0.5 h-5 w-5 text-yellow-400" />
               <div>
@@ -258,7 +261,7 @@ export default function StandingsPage() {
                   in your
                   <a
                     href="/dashboard/settings/privacy"
-                    className="ml-1 text-indigo-400 hover:underline"
+                    className="ml-1 text-indigo-400 transition-colors duration-150 hover:underline"
                   >
                     Privacy Settings
                   </a>
@@ -266,25 +269,21 @@ export default function StandingsPage() {
                 </p>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
 
-        {/* Season Selector */}
+        {/* Season Selector - NO animations */}
         {seasons.length > 0 && (
           <SeasonSelector
             seasons={seasons}
             selectedSeason={selectedSeason}
-            onSeasonChange={(id) => {
-              setSelectedSeason(id);
-              // Re-check prize eligibility when season changes
-              checkPrizeEligibility();
-            }}
+            onSeasonChange={handleSeasonChange}
             activeSeason={activeSeasonObj}
           />
         )}
 
-        {/* League Table */}
-        <motion.div variants={itemVariants}>
+        {/* League Table - NO animations */}
+        <div>
           {selectedSeason ? (
             privacySettings.showStats ? (
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl">
@@ -304,7 +303,7 @@ export default function StandingsPage() {
                 </p>
                 <Link
                   href="/dashboard/settings/privacy"
-                  className="mt-4 inline-flex min-h-[44px] items-center gap-1 text-indigo-400 transition-all hover:text-indigo-300"
+                  className="mt-4 inline-flex min-h-[44px] items-center gap-1 text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
                 >
                   Go to Privacy Settings <ChevronRight className="h-4 w-4" />
                 </Link>
@@ -315,28 +314,22 @@ export default function StandingsPage() {
               No seasons available.
             </div>
           )}
-        </motion.div>
+        </div>
 
-        {/* Prize Display */}
+        {/* Prize Display - NO animations */}
         {showPrize && (
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 p-4 backdrop-blur-xl"
-          >
+          <div className="rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 p-4 backdrop-blur-xl">
             <div className="mb-2 flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-yellow-400" />
               <h3 className="text-sm font-semibold text-white">🏆 Prize Pool</h3>
             </div>
             <PrizeDisplay compact={true} />
-          </motion.div>
+          </div>
         )}
 
-        {/* Prize Breakdown */}
+        {/* Prize Breakdown - NO animations */}
         {showPrize && (
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
-          >
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
             <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
               <Trophy className="h-4 w-4 text-yellow-400" />
               Prize Breakdown
@@ -365,31 +358,28 @@ export default function StandingsPage() {
             </div>
             <Link
               href="/dashboard/prize"
-              className="mt-3 block text-center text-xs text-indigo-400 transition-colors hover:text-indigo-300"
+              className="mt-3 block text-center text-xs text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
             >
               View Full Prize Details →
             </Link>
-          </motion.div>
+          </div>
         )}
 
-        {/* Season Archive Link */}
+        {/* Season Archive Link - NO animations */}
         {selectedSeason && (
-          <motion.div variants={itemVariants} className="flex justify-end">
+          <div className="flex justify-end">
             <Link
               href={`/seasons/${selectedSeason}`}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-indigo-400 backdrop-blur-xl transition-colors hover:bg-white/10 hover:text-indigo-300"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-indigo-400 backdrop-blur-xl transition-colors duration-150 hover:bg-white/10 hover:text-indigo-300"
             >
               <Archive size={16} />
               View Season Archive →
             </Link>
-          </motion.div>
+          </div>
         )}
 
-        {/* Rules Card */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-500/10 to-purple-500/10 p-5 backdrop-blur-xl"
-        >
+        {/* Rules Card - NO animations */}
+        <div className="rounded-2xl border border-blue-500/20 bg-gradient-to-r from-blue-500/10 to-purple-500/10 p-5 backdrop-blur-xl">
           <div className="flex items-start gap-3">
             <div className="rounded-xl bg-blue-500/20 p-2">
               <Trophy className="h-5 w-5 text-blue-400" />
@@ -416,8 +406,8 @@ export default function StandingsPage() {
               </div>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
-    </div>
+        </div>
+      </div>
+    </>
   );
 }

@@ -15,7 +15,7 @@ const inter = Inter({
   fallback: ["system-ui", "sans-serif"],
 });
 
-// ✅ Metadata export (without viewport and themeColor)
+// ✅ Metadata export
 export const metadata: Metadata = {
   title: {
     default: "Nexus Esports Hub",
@@ -152,22 +152,7 @@ export default function RootLayout({
           overflowX: "hidden",
         }}
       >
-        {/* ✅ Full background wrapper - covers everything */}
-        <div 
-          className="fixed inset-0 -z-20 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950"
-          style={{ 
-            minHeight: "100dvh",
-          }}
-        >
-          {/* Background orbs - fixed and always behind */}
-          <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-purple-600/20 blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-500/10 blur-3xl" />
-          <div className="absolute top-1/4 -left-20 h-64 w-64 rounded-full bg-emerald-600/10 blur-3xl" />
-          <div className="absolute bottom-1/4 -right-20 h-64 w-64 rounded-full bg-blue-600/10 blur-3xl" />
-        </div>
-
-        {/* ✅ Content wrapper */}
+        {/* ✅ Content wrapper - NO duplicate backgrounds */}
         <div className="relative z-0 min-h-dvh">
           <AuthProvider>
             <MaintenanceOverlay>

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { CompetitionStatus } from "@prisma/client"
 
+// ✅ GET - Fetch player entry status
+// ✅ GET - Fetch player entry status (FIXED)
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
@@ -18,76 +20,27 @@ export async function GET() {
     const userId = session.user.id
     const startTime = performance.now()
 
-    // ✅ BATCH: Get all data in a single parallel query
-    const [activeSeason, leagueEntry, paymentStatus] = await Promise.all([
-      // 1. Get active season with minimal fields
-      prisma.season.findFirst({
-        where: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          leagueSettings: {
-            select: {
-              paymentRequired: true,
-              entryFee: true,
-            },
-          },
-          prizePool: {
-            select: {
-              entryFee: true,
-            },
+    // ✅ First, get active season
+    const activeSeason = await prisma.season.findFirst({
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        leagueSettings: {
+          select: {
+            paymentRequired: true,
+            entryFee: true,
           },
         },
-      }),
-      
-      // 2. Check if user is in league
-      prisma.leagueEntry.findUnique({
-        where: {
-          seasonId_playerId: {
-            seasonId: (await prisma.season.findFirst({
-              where: { isActive: true },
-              select: { id: true }
-            }))?.id || '',
-            playerId: userId,
+        prizePool: {
+          select: {
+            entryFee: true,
           },
         },
-        select: {
-          id: true,
-        },
-      }),
-      
-      // 3. Get payment status in a single optimized query
-      prisma.$queryRaw<{ hasPaid: boolean; status: string; receipt: string | null; paidAt: Date | null; checkoutId: string | null }[]>`
-        SELECT 
-          CASE 
-            WHEN se.status = 'ACTIVE' THEN true
-            WHEN se.status = 'PAYMENT_PENDING' THEN false
-            WHEN pse."hasPaid" = true THEN true
-            ELSE false
-          END as "hasPaid",
-          CASE 
-            WHEN se.status = 'ACTIVE' THEN 'PAID'
-            WHEN se.status = 'PAYMENT_PENDING' THEN 'PAYMENT_PENDING'
-            WHEN pse."hasPaid" = true THEN 'PAID'
-            ELSE 'NOT_ENROLLED'
-          END as status,
-          COALESCE(se."mpesaReceipt", pse."paymentReceipt") as receipt,
-          COALESCE(se."paidAt", pse."paidAt") as "paidAt",
-          se."checkoutRequestId" as "checkoutId"
-        FROM "Season" s
-        LEFT JOIN "SeasonEntry" se ON se."seasonId" = s.id AND se."userId" = ${userId}
-        LEFT JOIN "PlayerSeasonEntry" pse ON pse."seasonId" = s.id AND pse."userId" = ${userId}
-        WHERE s."isActive" = true
-        LIMIT 1
-      `,
-    ])
+      },
+    })
 
-    const duration = performance.now() - startTime
-    if (duration > 100) {
-      console.log(`📊 Player entry fetched in ${duration.toFixed(0)}ms`)
-    }
-
-    // ✅ If no active season
+    // ✅ If no active season, return early
     if (!activeSeason) {
       return NextResponse.json({
         hasEntry: false,
@@ -104,7 +57,20 @@ export async function GET() {
       })
     }
 
-    // ✅ If user is not in league
+    // ✅ Now check if user is in league using the actual seasonId
+    const leagueEntry = await prisma.leagueEntry.findUnique({
+      where: {
+        seasonId_playerId: {
+          seasonId: activeSeason.id,
+          playerId: userId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    // ✅ If user is not in league, return early
     if (!leagueEntry) {
       return NextResponse.json({
         hasEntry: false,
@@ -119,6 +85,36 @@ export async function GET() {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
         },
       })
+    }
+
+    // ✅ Get payment status
+    const paymentStatus = await prisma.$queryRaw<{ hasPaid: boolean; status: string; receipt: string | null; paidAt: Date | null; checkoutId: string | null }[]>`
+      SELECT 
+        CASE 
+          WHEN se.status = 'ACTIVE' THEN true
+          WHEN se.status = 'PAYMENT_PENDING' THEN false
+          WHEN pse."hasPaid" = true THEN true
+          ELSE false
+        END as "hasPaid",
+        CASE 
+          WHEN se.status = 'ACTIVE' THEN 'PAID'
+          WHEN se.status = 'PAYMENT_PENDING' THEN 'PAYMENT_PENDING'
+          WHEN pse."hasPaid" = true THEN 'PAID'
+          ELSE 'NOT_ENROLLED'
+        END as status,
+        COALESCE(se."mpesaReceipt", pse."paymentReceipt") as receipt,
+        COALESCE(se."paidAt", pse."paidAt") as "paidAt",
+        se."checkoutRequestId" as "checkoutId"
+      FROM "Season" s
+      LEFT JOIN "SeasonEntry" se ON se."seasonId" = s.id AND se."userId" = ${userId}
+      LEFT JOIN "PlayerSeasonEntry" pse ON pse."seasonId" = s.id AND pse."userId" = ${userId}
+      WHERE s."isActive" = true
+      LIMIT 1
+    `
+
+    const duration = performance.now() - startTime
+    if (duration > 100) {
+      console.log(`📊 Player entry fetched in ${duration.toFixed(0)}ms`)
     }
 
     // ✅ Extract payment data
@@ -167,5 +163,125 @@ export async function GET() {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
       },
     })
+  }
+}
+
+// ✅ POST - Create or update player entry
+export async function POST(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { seasonId, userId } = body
+
+    if (!seasonId || !userId) {
+      return NextResponse.json(
+        { error: "Season ID and User ID required" },
+        { status: 400 }
+      )
+    }
+
+    // ✅ Use upsert for SeasonEntry
+    const seasonEntry = await prisma.seasonEntry.upsert({
+      where: {
+        userId_seasonId: {
+          userId,
+          seasonId,
+        },
+      },
+      update: {
+        // Only update if needed - keep existing data
+      },
+      create: {
+        userId,
+        seasonId,
+        status: CompetitionStatus.NOT_ENROLLED,
+        entryFee: 0,
+        currency: "KES",
+      },
+    })
+
+    // ✅ Use upsert for LeagueEntry
+    const leagueEntry = await prisma.leagueEntry.upsert({
+      where: {
+        seasonId_playerId: {
+          seasonId,
+          playerId: userId,
+        },
+      },
+      update: {
+        // Update if needed
+        seasonEntryId: seasonEntry.id,
+      },
+      create: {
+        seasonId,
+        playerId: userId,
+        played: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+        points: 0,
+        seasonEntryId: seasonEntry.id,
+      },
+    })
+
+    // ✅ Use upsert for PlayerSeasonEntry
+    await prisma.playerSeasonEntry.upsert({
+      where: {
+        userId_seasonId: {
+          userId,
+          seasonId,
+        },
+      },
+      update: {
+        hasPaid: false,
+        seasonEntryId: seasonEntry.id,
+      },
+      create: {
+        userId,
+        seasonId,
+        hasPaid: false,
+        seasonEntryId: seasonEntry.id,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: "Player entry created/updated successfully",
+      data: { seasonEntry, leagueEntry },
+    }, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
+  } catch (error) {
+    console.error("Error creating player entry:", error)
+    
+    // ✅ Handle unique constraint error
+    if (error instanceof Error && error.message.includes("Unique constraint")) {
+      return NextResponse.json({
+        success: true,
+        message: "Player entry already exists",
+        alreadyExists: true,
+      }, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      })
+    }
+
+    return NextResponse.json(
+      { error: "Failed to create player entry" },
+      { status: 500 }
+    )
   }
 }

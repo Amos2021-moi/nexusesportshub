@@ -1,10 +1,8 @@
-// app/admin/settings/backup/page.tsx
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Shield,
   Download,
@@ -44,6 +42,7 @@ import {
   AlertTriangle,
   Grid,
   List,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -93,63 +92,60 @@ interface ScheduleConfig {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.02 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                           Background Component                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gray-950">
-    <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
-    <motion.div
-      animate={{ scale: [1, 1.15, 1], opacity: [0.2, 0.35, 0.2] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-40 top-10 h-[550px] w-[550px] rounded-full bg-indigo-600/20 blur-[140px]"
-    />
-    <motion.div
-      animate={{ scale: [1.15, 1, 1.15], opacity: [0.15, 0.3, 0.15] }}
-      transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-40 top-1/3 h-[550px] w-[550px] rounded-full bg-purple-600/15 blur-[140px]"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.1, 0.25, 0.1] }}
-      transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-10 left-1/4 h-[500px] w-[500px] rounded-full bg-emerald-600/10 blur-[140px]"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.025]"
-      style={{
-        backgroundImage:
-          "linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)",
-        backgroundSize: "64px 64px",
-      }}
-    />
-  </div>
-));
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gray-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gray-950">
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
+      <div className="absolute -left-40 top-10 h-[550px] w-[550px] rounded-full bg-indigo-600/20 blur-[140px]" />
+      <div className="absolute -right-40 top-1/3 h-[550px] w-[550px] rounded-full bg-purple-600/15 blur-[140px]" />
+      <div className="absolute bottom-10 left-1/4 h-[500px] w-[500px] rounded-full bg-emerald-600/10 blur-[140px]" />
+      <div
+        className="absolute inset-0 opacity-[0.025]"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)",
+          backgroundSize: "64px 64px",
+        }}
+      />
+    </div>
+  );
+});
 
 DecorBackground.displayName = "DecorBackground";
 
 /* -------------------------------------------------------------------------- */
-/*                         Memoized Snapshot Row / Card                       */
+/*                         STATIC Backup Card                                 */
 /* -------------------------------------------------------------------------- */
 
 interface BackupItemProps {
@@ -161,94 +157,345 @@ interface BackupItemProps {
   onDelete: (id: string) => void;
 }
 
-const BackupCard = memo(({ backup, formatSize, getStatusColor, getTypeColor, onRestore, onDelete }: BackupItemProps) => (
-  <motion.div
-    variants={itemVariants}
-    whileHover={{ y: -4 }}
-    className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-lg backdrop-blur-xl transition-all duration-300 hover:border-indigo-500/40 hover:bg-white/[0.09] hover:shadow-[0_12px_36px_0_rgba(79,70,229,0.2)]"
-  >
-    <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-    
-    <div>
-      <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3.5">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-500/20 ring-1 ring-indigo-500/30 text-indigo-400">
-            <FileArchive className="h-5 w-5" />
+const BackupCard = memo(({ backup, formatSize, getStatusColor, getTypeColor, onRestore, onDelete }: BackupItemProps) => {
+  const isMobile = useIsMobile();
+  // NO hover effects on mobile
+  const hoverClass = isMobile ? "" : "hover:border-indigo-500/40 hover:bg-white/[0.09] hover:shadow-[0_12px_36px_0_rgba(79,70,229,0.2)]";
+
+  return (
+    <div className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-lg backdrop-blur-xl transition-all duration-150 ${hoverClass}`}>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      
+      <div>
+        <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] pb-3.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-500/20 ring-1 ring-indigo-500/30 text-indigo-400">
+              <FileArchive className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-bold text-white group-hover:text-indigo-300 transition-colors">
+                {backup.name}
+              </h3>
+              <p className="text-xs text-gray-400">
+                Created by <span className="font-semibold text-gray-300">{backup.user?.name || backup.createdBy || "System AI"}</span>
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h3 className="truncate text-base font-bold text-white group-hover:text-indigo-300 transition-colors">
-              {backup.name}
-            </h3>
-            <p className="text-xs text-gray-400">
-              Created by <span className="font-semibold text-gray-300">{backup.user?.name || backup.createdBy || "System AI"}</span>
-            </p>
-          </div>
+
+          {backup.metadata?.encrypted && (
+            <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300 shadow-sm" title="256-Bit Encrypted Snapshot">
+              <Lock className="h-3 w-3" />
+              Encrypted
+            </span>
+          )}
         </div>
 
-        {backup.metadata?.encrypted && (
-          <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300 shadow-sm" title="256-Bit Encrypted Snapshot">
-            <Lock className="h-3 w-3" />
-            Encrypted
-          </span>
-        )}
+        <div className="my-4 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Type</span>
+            <span className={`mt-1 inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${getTypeColor(backup.type)}`}>
+              {backup.type}
+            </span>
+          </div>
+          <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</span>
+            <span className={`mt-1 inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${getStatusColor(backup.status)}`}>
+              {backup.status}
+            </span>
+          </div>
+          <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Compressed Size</span>
+            <span className="mt-1 block font-mono text-sm font-black text-white">{formatSize(backup.size)}</span>
+          </div>
+          <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Timestamp</span>
+            <span className="mt-1 block text-xs font-semibold text-gray-300">
+              {new Date(backup.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="my-4 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
-          <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Type</span>
-          <span className={`mt-1 inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${getTypeColor(backup.type)}`}>
-            {backup.type}
-          </span>
-        </div>
-        <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
-          <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Status</span>
-          <span className={`mt-1 inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${getStatusColor(backup.status)}`}>
-            {backup.status}
-          </span>
-        </div>
-        <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
-          <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Compressed Size</span>
-          <span className="mt-1 block font-mono text-sm font-black text-white">{formatSize(backup.size)}</span>
-        </div>
-        <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-2.5">
-          <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Timestamp</span>
-          <span className="mt-1 block text-xs font-semibold text-gray-300">
-            {new Date(backup.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-          </span>
-        </div>
+      {/* Actions */}
+      <div className="flex items-center gap-2 border-t border-white/[0.06] pt-3.5">
+        <button
+          onClick={() => onRestore(backup)}
+          className="flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-3 py-2 text-xs font-bold text-emerald-300 transition-colors duration-150 hover:bg-emerald-500/30 hover:text-white"
+          title="Restore Snapshot"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Restore
+        </button>
+        <button
+          onClick={() => window.open(`/api/admin/backup/${backup.id}`, "_blank")}
+          className="flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-500/20 border border-blue-500/30 px-3 py-2 text-xs font-bold text-blue-300 transition-colors duration-150 hover:bg-blue-500/30 hover:text-white"
+          title="Download ZIP"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Download
+        </button>
+        <button
+          onClick={() => onDelete(backup.id)}
+          className="flex min-h-[40px] items-center justify-center rounded-xl bg-rose-500/20 border border-rose-500/30 px-3 py-2 text-rose-400 transition-colors duration-150 hover:bg-rose-500/30 hover:text-white"
+          title="Permanently Delete Snapshot"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
     </div>
-
-    {/* Actions */}
-    <div className="flex items-center gap-2 border-t border-white/[0.06] pt-3.5">
-      <button
-        onClick={() => onRestore(backup)}
-        className="flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-3 py-2 text-xs font-bold text-emerald-300 transition-all hover:bg-emerald-500/30 hover:text-white"
-        title="Restore Snapshot"
-      >
-        <Upload className="h-3.5 w-3.5" />
-        Restore
-      </button>
-      <button
-        onClick={() => window.open(`/api/admin/backup/${backup.id}`, "_blank")}
-        className="flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-500/20 border border-blue-500/30 px-3 py-2 text-xs font-bold text-blue-300 transition-all hover:bg-blue-500/30 hover:text-white"
-        title="Download ZIP"
-      >
-        <Download className="h-3.5 w-3.5" />
-        Download
-      </button>
-      <button
-        onClick={() => onDelete(backup.id)}
-        className="flex min-h-[40px] items-center justify-center rounded-xl bg-rose-500/20 border border-rose-500/30 px-3 py-2 text-rose-400 transition-all hover:bg-rose-500/30 hover:text-white"
-        title="Permanently Delete Snapshot"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
-    </div>
-  </motion.div>
-));
+  );
+});
 
 BackupCard.displayName = "BackupCard";
+
+/* -------------------------------------------------------------------------- */
+/*                               STATIC List Table Row                        */
+/* -------------------------------------------------------------------------- */
+
+const BackupTableRow = memo(({ backup, formatSize, getStatusColor, getTypeColor, onRestore, onDelete }: BackupItemProps) => (
+  <tr className="transition-colors duration-150 hover:bg-white/[0.04]">
+    <td className="px-5 py-4">
+      <div className="flex items-center gap-3 min-w-[200px]">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/30">
+          <FileArchive className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="font-bold text-white">{backup.name}</p>
+          <p className="text-xs text-gray-400">by {backup.user?.name || backup.createdBy || "System AI"}</p>
+        </div>
+      </div>
+    </td>
+    <td className="px-5 py-4">
+      <span className={`inline-block rounded-md px-2.5 py-1 text-xs font-bold ${getTypeColor(backup.type)}`}>
+        {backup.type}
+      </span>
+    </td>
+    <td className="px-5 py-4">
+      <span className={`inline-block rounded-md px-2.5 py-1 text-xs font-bold ${getStatusColor(backup.status)}`}>
+        {backup.status}
+      </span>
+    </td>
+    <td className="px-5 py-4 font-mono font-bold text-white">
+      {formatSize(backup.size)}
+    </td>
+    <td className="px-5 py-4 text-xs font-medium text-gray-300">
+      {new Date(backup.createdAt).toLocaleString()}
+    </td>
+    <td className="px-5 py-4 text-right">
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={() => onRestore(backup)}
+          className="rounded-lg bg-emerald-500/20 p-2 text-emerald-300 transition-colors duration-150 hover:bg-emerald-500/30 hover:text-white"
+          title="Restore Snapshot"
+        >
+          <Upload className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => window.open(`/api/admin/backup/${backup.id}`, "_blank")}
+          className="rounded-lg bg-blue-500/20 p-2 text-blue-300 transition-colors duration-150 hover:bg-blue-500/30 hover:text-white"
+          title="Download ZIP Archive"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => onDelete(backup.id)}
+          className="rounded-lg bg-rose-500/20 p-2 text-rose-400 transition-colors duration-150 hover:bg-rose-500/30 hover:text-white"
+          title="Delete Snapshot"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </td>
+  </tr>
+));
+
+BackupTableRow.displayName = "BackupTableRow";
+
+/* -------------------------------------------------------------------------- */
+/*                               STATIC Modal Components                      */
+/* -------------------------------------------------------------------------- */
+
+const RestoreModal = memo(({ 
+  backup, 
+  onClose, 
+  onRestore, 
+  formatSize 
+}: { 
+  backup: Backup; 
+  onClose: () => void; 
+  onRestore: (id: string) => void; 
+  formatSize: (bytes: number) => string;
+}) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+    <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/20 bg-[#0d1126] p-6 shadow-2xl shadow-indigo-950/80 sm:p-8">
+      <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <h2 className="text-xl font-black text-white">Restore Database Snapshot</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1 text-gray-400 transition-colors duration-150 hover:bg-white/10 hover:text-white"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="my-6 space-y-4">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
+            <div>
+              <p className="text-sm font-bold text-amber-300">High-Risk System Action</p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-200/80">
+                Restoring this volume will overwrite all current database tables with the records contained inside <strong className="text-white">{backup.name}</strong>. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-2.5 text-xs">
+          <div className="flex justify-between">
+            <span className="text-gray-400">Snapshot Volume:</span>
+            <span className="font-bold text-white">{backup.name}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Creation Timestamp:</span>
+            <span className="font-semibold text-gray-200">{new Date(backup.createdAt).toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-400">Compressed Archive Size:</span>
+            <span className="font-mono font-bold text-white">{formatSize(backup.size)}</span>
+          </div>
+          {backup.metadata?.encrypted && (
+            <div className="flex justify-between border-t border-white/10 pt-2">
+              <span className="text-gray-400">256-Bit Cryptographic Seal:</span>
+              <span className="font-bold text-emerald-400">✅ Verified &amp; Encrypted</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => onRestore(backup.id)}
+          className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 font-bold text-white shadow-lg shadow-rose-600/30 transition-all duration-150 hover:from-rose-500 hover:to-red-500 active:scale-95"
+        >
+          <Upload className="h-4 w-4" />
+          <span>Confirm &amp; Restore</span>
+        </button>
+        <button
+          onClick={onClose}
+          className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/[0.08] font-bold text-gray-300 transition-colors duration-150 hover:bg-white/15 hover:text-white active:scale-95"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+));
+
+RestoreModal.displayName = "RestoreModal";
+
+const TransferModal = memo(({ 
+  transferData, 
+  setTransferData, 
+  onClose, 
+  onTransfer 
+}: { 
+  transferData: any; 
+  setTransferData: (data: any) => void; 
+  onClose: () => void; 
+  onTransfer: () => void;
+}) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+    <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/20 bg-[#0d1126] p-6 shadow-2xl shadow-indigo-950/80 sm:p-8">
+      <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/30">
+            <Cloud className="h-5 w-5" />
+          </div>
+          <h2 className="text-xl font-black text-white">External Node Snapshot Transfer</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1 text-gray-400 transition-colors duration-150 hover:bg-white/10 hover:text-white"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="my-6 space-y-4 text-xs">
+        <div>
+          <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">Target Platform URL *</label>
+          <input
+            type="text"
+            value={transferData.targetUrl}
+            onChange={(e) => setTransferData({ ...transferData, targetUrl: e.target.value })}
+            placeholder="https://platform-b.vercel.app"
+            className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          />
+          <p className="mt-1 text-[11px] text-gray-400">The destination Nexus Esports platform instance endpoint</p>
+        </div>
+
+        <div>
+          <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">API Authentication Key (Optional)</label>
+          <input
+            type="password"
+            value={transferData.apiKey}
+            onChange={(e) => setTransferData({ ...transferData, apiKey: e.target.value })}
+            placeholder="••••••••••••••••••••••••••••"
+            className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          />
+          <p className="mt-1 text-[11px] text-gray-400">Required if the destination node enforces secure API handshake</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">Season ID (Optional)</label>
+            <input
+              type="text"
+              value={transferData.seasonId}
+              onChange={(e) => setTransferData({ ...transferData, seasonId: e.target.value })}
+              placeholder="Leave blank for full"
+              className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-sm font-semibold text-white focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">Tournament IDs (Optional)</label>
+            <input
+              type="text"
+              value={transferData.tournamentIds}
+              onChange={(e) => setTransferData({ ...transferData, tournamentIds: e.target.value })}
+              placeholder="id1, id2, id3"
+              className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-sm font-semibold text-white focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={onTransfer}
+          className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 font-bold text-white shadow-lg shadow-purple-600/30 transition-all duration-150 hover:from-purple-500 hover:to-indigo-500 active:scale-95"
+        >
+          <Cloud className="h-4 w-4" />
+          <span>Start Node Transfer</span>
+        </button>
+        <button
+          onClick={onClose}
+          className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/[0.08] font-bold text-gray-300 transition-colors duration-150 hover:bg-white/15 hover:text-white active:scale-95"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+));
+
+TransferModal.displayName = "TransferModal";
 
 /* -------------------------------------------------------------------------- */
 /*                               Main Component                               */
@@ -257,6 +504,7 @@ BackupCard.displayName = "BackupCard";
 export default function BackupSettingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [backups, setBackups] = useState<Backup[]>([]);
   const [stats, setStats] = useState<BackupStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -343,7 +591,6 @@ export default function BackupSettingsPage() {
 
     const loadingToast = toast.loading("Creating snapshot...");
 
-    // Simulated step progress while backend builds the dump
     const timer = setInterval(() => {
       setCreatingProgress((prev) => {
         if (prev < 40) {
@@ -622,27 +869,19 @@ export default function BackupSettingsPage() {
     <>
       <DecorBackground />
 
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="min-h-screen px-3 py-6 sm:px-6 sm:py-8 lg:px-8"
-      >
+      <div className="min-h-screen px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
           {/* ===================================================================== */}
-          {/* 1. HEADER & BACK NAVIGATION                                           */}
+          {/* 1. HEADER & BACK NAVIGATION - NO animations                          */}
           {/* ===================================================================== */}
-          <motion.div
-            variants={itemVariants}
-            className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-          >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-4 sm:items-center">
               <Link
                 href="/admin"
-                className="group flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-gray-300 transition-all duration-300 hover:border-indigo-500/40 hover:bg-white/10 hover:text-white"
+                className="group flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-gray-300 transition-all duration-150 hover:border-indigo-500/40 hover:bg-white/10 hover:text-white"
                 title="Back to Admin Dashboard"
               >
-                <ArrowLeft className="h-5 w-5 transition-transform duration-300 group-hover:-translate-x-1" />
+                <ArrowLeft className="h-5 w-5 transition-transform duration-150 group-hover:-translate-x-1" />
               </Link>
               <div>
                 <h1 className="flex items-center gap-2.5 text-2xl font-black tracking-tight text-white sm:text-3xl">
@@ -659,7 +898,7 @@ export default function BackupSettingsPage() {
               <div className="flex items-center gap-1 rounded-xl bg-black/40 p-1 ring-1 ring-white/10">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`flex min-h-[38px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                  className={`flex min-h-[38px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors duration-150 ${
                     viewMode === "grid" ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30" : "text-gray-400 hover:text-white"
                   }`}
                   title="Grid Snapshot View"
@@ -669,7 +908,7 @@ export default function BackupSettingsPage() {
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`flex min-h-[38px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                  className={`flex min-h-[38px] items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors duration-150 ${
                     viewMode === "list" ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30" : "text-gray-400 hover:text-white"
                   }`}
                   title="Table List View"
@@ -679,13 +918,13 @@ export default function BackupSettingsPage() {
                 </button>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* ===================================================================== */}
-          {/* 2. STATS OVERVIEW WIDGETS (4 Columns)                                 */}
+          {/* 2. STATS OVERVIEW WIDGETS (4 Columns) - NO animations                */}
           {/* ===================================================================== */}
-          <motion.div variants={containerVariants} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
-            <motion.div variants={itemVariants} className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
+            <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/20 ring-1 ring-blue-500/30 text-blue-400">
                   <Database className="h-6 w-6" />
@@ -695,9 +934,9 @@ export default function BackupSettingsPage() {
                   <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Total Backups</p>
                 </div>
               </div>
-            </motion.div>
+            </div>
 
-            <motion.div variants={itemVariants} className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
+            <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20 ring-1 ring-emerald-500/30 text-emerald-400">
                   <HardDrive className="h-6 w-6" />
@@ -707,9 +946,9 @@ export default function BackupSettingsPage() {
                   <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Storage Volume</p>
                 </div>
               </div>
-            </motion.div>
+            </div>
 
-            <motion.div variants={itemVariants} className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
+            <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/20 ring-1 ring-amber-500/30 text-amber-400">
                   <Clock className="h-6 w-6" />
@@ -721,28 +960,25 @@ export default function BackupSettingsPage() {
                   <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Latest Snapshot</p>
                 </div>
               </div>
-            </motion.div>
+            </div>
 
-            <motion.div variants={itemVariants} className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
+            <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-lg backdrop-blur-xl">
               <div className="flex items-center gap-3.5">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20 ring-1 ring-emerald-500/30 text-emerald-400">
-                  <CheckCircle className="h-6 w-6 animate-pulse" />
+                  <CheckCircle className="h-6 w-6" />
                 </div>
                 <div>
                   <p className="text-xl font-black text-emerald-400 sm:text-2xl">Healthy</p>
                   <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Recovery Status</p>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
 
           {/* ===================================================================== */}
-          {/* 3. AUTO BACKUP SCHEDULE CONFIGURATION CARD                            */}
+          {/* 3. AUTO BACKUP SCHEDULE CONFIGURATION CARD - NO animations           */}
           {/* ===================================================================== */}
-          <motion.div
-            variants={itemVariants}
-            className="rounded-3xl border border-white/[0.1] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-6 shadow-2xl backdrop-blur-2xl sm:p-8"
-          >
+          <div className="rounded-3xl border border-white/[0.1] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-6 shadow-2xl backdrop-blur-2xl sm:p-8">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.08] pb-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 ring-1 ring-amber-500/30 text-amber-400">
@@ -758,14 +994,14 @@ export default function BackupSettingsPage() {
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold shadow-sm ${
                   schedule.enabled ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-gray-700/50 text-gray-400 border border-gray-600"
                 }`}>
-                  <span className={`h-2 w-2 rounded-full ${schedule.enabled ? "bg-emerald-400 animate-ping" : "bg-gray-500"}`} />
+                  <span className={`h-2 w-2 rounded-full ${schedule.enabled ? "bg-emerald-400" : "bg-gray-500"}`} />
                   {schedule.enabled ? "CRON ACTIVE" : "CRON DISABLED"}
                 </span>
 
                 <button
                   onClick={toggleAutoBackup}
                   disabled={savingSchedule}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-all duration-300 focus:outline-none ${
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${
                     schedule.enabled ? "bg-indigo-600 shadow-md shadow-indigo-600/40" : "bg-gray-700"
                   }`}
                   title="Toggle Auto Backup Schedule"
@@ -786,7 +1022,7 @@ export default function BackupSettingsPage() {
                   <select
                     value={schedule.frequency}
                     onChange={(e) => updateSchedule({ frequency: e.target.value })}
-                    className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                   >
                     <option value="HOURLY" className="bg-gray-900">Hourly Dumps</option>
                     <option value="DAILY" className="bg-gray-900">Daily Snapshots</option>
@@ -801,7 +1037,7 @@ export default function BackupSettingsPage() {
                     type="time"
                     value={schedule.time}
                     onChange={(e) => updateSchedule({ time: e.target.value })}
-                    className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 font-mono text-sm font-semibold text-white transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 font-mono text-sm font-semibold text-white transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                   />
                 </div>
 
@@ -817,7 +1053,7 @@ export default function BackupSettingsPage() {
                         keepMonthly: Math.floor(days / 4),
                       });
                     }}
-                    className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                   >
                     <option value="3" className="bg-gray-900">3 Days (Quick Cycle)</option>
                     <option value="7" className="bg-gray-900">7 Days (Standard SLA)</option>
@@ -850,35 +1086,33 @@ export default function BackupSettingsPage() {
                 <span>• Retain {schedule.keepDaily} daily copies</span>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* ===================================================================== */}
-          {/* 4. INSTANT COMMAND ACTION BAR (Touch-Friendly min 44px)             */}
+          {/* 4. INSTANT COMMAND ACTION BAR (Touch-Friendly min 44px) - NO animations */}
           {/* ===================================================================== */}
-          <motion.div variants={itemVariants} className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-              {/* Create Snapshot Button */}
               <button
                 onClick={createBackup}
                 disabled={creating}
-                className="group relative flex min-h-[48px] flex-1 sm:flex-initial items-center justify-center gap-2.5 overflow-hidden rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-300 hover:from-indigo-500 hover:to-pink-500 hover:shadow-indigo-500/50 active:scale-95 disabled:opacity-50"
+                className="group relative flex min-h-[48px] flex-1 sm:flex-initial items-center justify-center gap-2.5 overflow-hidden rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-150 hover:from-indigo-500 hover:to-pink-500 hover:shadow-indigo-500/50 active:scale-95 disabled:opacity-50"
               >
                 {creating ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin text-indigo-200" />
+                    <Loader2 className="h-4 w-4 animate-spin text-indigo-200" />
                     <span>Creating Snapshot ({creatingProgress}%)</span>
                   </>
                 ) : (
                   <>
-                    <Plus className="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
+                    <Plus className="h-4 w-4 transition-transform duration-150 group-hover:rotate-90" />
                     <span>Create Manual Snapshot</span>
                   </>
                 )}
               </button>
 
-              {/* Upload Backup Trigger */}
-              <label className="group flex min-h-[48px] flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-600/20 px-5 py-3 text-sm font-bold text-emerald-300 shadow-md backdrop-blur-md transition-all duration-300 hover:bg-emerald-600/30 hover:text-white active:scale-95 cursor-pointer">
-                <Upload className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5" />
+              <label className="group flex min-h-[48px] flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-600/20 px-5 py-3 text-sm font-bold text-emerald-300 shadow-md backdrop-blur-md transition-colors duration-150 hover:bg-emerald-600/30 hover:text-white active:scale-95 cursor-pointer">
+                <Upload className="h-4 w-4 transition-transform duration-150 group-hover:-translate-y-0.5" />
                 <span>Upload Archive</span>
                 <input
                   type="file"
@@ -888,61 +1122,47 @@ export default function BackupSettingsPage() {
                 />
               </label>
 
-              {/* Transfer Backup */}
               <button
                 onClick={() => setShowTransferModal(true)}
-                className="group flex min-h-[48px] flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-purple-500/30 bg-purple-600/20 px-5 py-3 text-sm font-bold text-purple-300 shadow-md backdrop-blur-md transition-all duration-300 hover:bg-purple-600/30 hover:text-white active:scale-95"
+                className="group flex min-h-[48px] flex-1 sm:flex-initial items-center justify-center gap-2 rounded-xl border border-purple-500/30 bg-purple-600/20 px-5 py-3 text-sm font-bold text-purple-300 shadow-md backdrop-blur-md transition-colors duration-150 hover:bg-purple-600/30 hover:text-white active:scale-95"
               >
-                <Cloud className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+                <Cloud className="h-4 w-4 transition-transform duration-150 group-hover:scale-110" />
                 <span>Node Transfer</span>
               </button>
             </div>
 
-            {/* Refresh Button */}
             <button
               onClick={fetchData}
-              className="flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-5 py-3 text-sm font-bold text-gray-300 backdrop-blur-md transition-all duration-300 hover:border-white/30 hover:bg-white/[0.12] hover:text-white active:scale-95"
+              className="flex min-h-[48px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-5 py-3 text-sm font-bold text-gray-300 backdrop-blur-md transition-colors duration-150 hover:border-white/30 hover:bg-white/[0.12] hover:text-white active:scale-95"
             >
               <RefreshCw className="h-4 w-4" />
               <span>Refresh Vault</span>
             </button>
-          </motion.div>
+          </div>
 
-          {/* Animated Progress Bar during manual snapshot creation */}
-          <AnimatePresence>
-            {creating && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/80 to-purple-950/80 p-5 shadow-2xl backdrop-blur-xl"
-              >
-                <div className="mb-2 flex items-center justify-between text-xs font-bold text-indigo-300">
-                  <span className="flex items-center gap-2">
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    {creatingStep || "Generating cryptographically verified snapshot dump..."}
-                  </span>
-                  <span className="font-mono text-white">{creatingProgress}%</span>
-                </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-black/50 p-0.5 ring-1 ring-white/10">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${creatingProgress}%` }}
-                    transition={{ duration: 0.3 }}
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-sm"
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Animated Progress Bar during manual snapshot creation - NO framer-motion */}
+          {creating && (
+            <div className="overflow-hidden rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/80 to-purple-950/80 p-5 shadow-2xl backdrop-blur-xl">
+              <div className="mb-2 flex items-center justify-between text-xs font-bold text-indigo-300">
+                <span className="flex items-center gap-2">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  {creatingStep || "Generating cryptographically verified snapshot dump..."}
+                </span>
+                <span className="font-mono text-white">{creatingProgress}%</span>
+              </div>
+              <div className="h-3 w-full overflow-hidden rounded-full bg-black/50 p-0.5 ring-1 ring-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-sm transition-all duration-300"
+                  style={{ width: `${creatingProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           {/* ===================================================================== */}
-          {/* 5. BACKUP HISTORY VAULT (Cards or Responsive Table)                 */}
+          {/* 5. BACKUP HISTORY VAULT (Cards or Responsive Table) - NO animations   */}
           {/* ===================================================================== */}
-          <motion.div
-            variants={itemVariants}
-            className="rounded-3xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-2xl backdrop-blur-xl sm:p-8"
-          >
+          <div className="rounded-3xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-2xl backdrop-blur-xl sm:p-8">
             <div className="mb-6 flex items-center justify-between border-b border-white/[0.08] pb-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/20 ring-1 ring-indigo-500/30 text-indigo-400">
@@ -970,19 +1190,14 @@ export default function BackupSettingsPage() {
                 </p>
                 <button
                   onClick={createBackup}
-                  className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:from-indigo-500 hover:to-purple-500"
+                  className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-150 hover:from-indigo-500 hover:to-purple-500"
                 >
                   <Plus className="h-4 w-4" />
                   Create First Snapshot
                 </button>
               </div>
             ) : viewMode === "grid" ? (
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-                className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 items-stretch"
-              >
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 items-stretch">
                 {backups.map((backup) => (
                   <BackupCard
                     key={backup.id}
@@ -997,7 +1212,7 @@ export default function BackupSettingsPage() {
                     onDelete={deleteBackup}
                   />
                 ))}
-              </motion.div>
+              </div>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-black/20">
                 <table className="w-full text-left border-collapse">
@@ -1013,249 +1228,50 @@ export default function BackupSettingsPage() {
                   </thead>
                   <tbody className="divide-y divide-white/[0.06] text-sm">
                     {backups.map((backup) => (
-                      <tr key={backup.id} className="transition-colors hover:bg-white/[0.04]">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3 min-w-[200px]">
-                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/30">
-                              <FileArchive className="h-4 w-4" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-white">{backup.name}</p>
-                              <p className="text-xs text-gray-400">by {backup.user?.name || backup.createdBy || "System AI"}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={`inline-block rounded-md px-2.5 py-1 text-xs font-bold ${getTypeColor(backup.type)}`}>
-                            {backup.type}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={`inline-block rounded-md px-2.5 py-1 text-xs font-bold ${getStatusColor(backup.status)}`}>
-                            {backup.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-mono font-bold text-white">
-                          {formatSize(backup.size)}
-                        </td>
-                        <td className="px-5 py-4 text-xs font-medium text-gray-300">
-                          {new Date(backup.createdAt).toLocaleString()}
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedBackup(backup);
-                                setShowRestoreModal(true);
-                              }}
-                              className="rounded-lg bg-emerald-500/20 p-2 text-emerald-300 transition-all hover:bg-emerald-500/30 hover:text-white"
-                              title="Restore Snapshot"
-                            >
-                              <Upload className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => window.open(`/api/admin/backup/${backup.id}`, "_blank")}
-                              className="rounded-lg bg-blue-500/20 p-2 text-blue-300 transition-all hover:bg-blue-500/30 hover:text-white"
-                              title="Download ZIP Archive"
-                            >
-                              <Download className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => deleteBackup(backup.id)}
-                              className="rounded-lg bg-rose-500/20 p-2 text-rose-400 transition-all hover:bg-rose-500/30 hover:text-white"
-                              title="Delete Snapshot"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <BackupTableRow
+                        key={backup.id}
+                        backup={backup}
+                        formatSize={formatSize}
+                        getStatusColor={getStatusColor}
+                        getTypeColor={getTypeColor}
+                        onRestore={(b) => {
+                          setSelectedBackup(b);
+                          setShowRestoreModal(true);
+                        }}
+                        onDelete={deleteBackup}
+                      />
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </motion.div>
+          </div>
 
           {/* ===================================================================== */}
-          {/* 6. RESTORE SNAPSHOT MODAL                                             */}
+          {/* 6. RESTORE SNAPSHOT MODAL - NO animations                             */}
           {/* ===================================================================== */}
-          <AnimatePresence>
-            {showRestoreModal && selectedBackup && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                  className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/20 bg-[#0d1126] p-6 shadow-2xl shadow-indigo-950/80 sm:p-8"
-                >
-                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30">
-                        <AlertTriangle className="h-5 w-5" />
-                      </div>
-                      <h2 className="text-xl font-black text-white">Restore Database Snapshot</h2>
-                    </div>
-                    <button
-                      onClick={() => setShowRestoreModal(false)}
-                      className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-
-                  <div className="my-6 space-y-4">
-                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-400" />
-                        <div>
-                          <p className="text-sm font-bold text-amber-300">High-Risk System Action</p>
-                          <p className="mt-1 text-xs leading-relaxed text-amber-200/80">
-                            Restoring this volume will overwrite all current database tables with the records contained inside <strong className="text-white">{selectedBackup.name}</strong>. This action cannot be undone.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-2.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Snapshot Volume:</span>
-                        <span className="font-bold text-white">{selectedBackup.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Creation Timestamp:</span>
-                        <span className="font-semibold text-gray-200">{new Date(selectedBackup.createdAt).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Compressed Archive Size:</span>
-                        <span className="font-mono font-bold text-white">{formatSize(selectedBackup.size)}</span>
-                      </div>
-                      {selectedBackup.metadata?.encrypted && (
-                        <div className="flex justify-between border-t border-white/10 pt-2">
-                          <span className="text-gray-400">256-Bit Cryptographic Seal:</span>
-                          <span className="font-bold text-emerald-400">✅ Verified &amp; Encrypted</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => restoreBackup(selectedBackup.id)}
-                      className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 font-bold text-white shadow-lg shadow-rose-600/30 transition-all hover:from-rose-500 hover:to-red-500 active:scale-95"
-                    >
-                      <Upload className="h-4 w-4" />
-                      <span>Confirm &amp; Restore</span>
-                    </button>
-                    <button
-                      onClick={() => setShowRestoreModal(false)}
-                      className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/[0.08] font-bold text-gray-300 transition-all hover:bg-white/15 hover:text-white active:scale-95"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
+          {showRestoreModal && selectedBackup && (
+            <RestoreModal
+              backup={selectedBackup}
+              onClose={() => setShowRestoreModal(false)}
+              onRestore={restoreBackup}
+              formatSize={formatSize}
+            />
+          )}
 
           {/* ===================================================================== */}
-          {/* 7. NODE TRANSFER SNAPSHOT MODAL                                       */}
+          {/* 7. NODE TRANSFER SNAPSHOT MODAL - NO animations                        */}
           {/* ===================================================================== */}
-          <AnimatePresence>
-            {showTransferModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                  className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/20 bg-[#0d1126] p-6 shadow-2xl shadow-indigo-950/80 sm:p-8"
-                >
-                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/30">
-                        <Cloud className="h-5 w-5" />
-                      </div>
-                      <h2 className="text-xl font-black text-white">External Node Snapshot Transfer</h2>
-                    </div>
-                    <button
-                      onClick={() => setShowTransferModal(false)}
-                      className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-
-                  <div className="my-6 space-y-4 text-xs">
-                    <div>
-                      <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">Target Platform URL *</label>
-                      <input
-                        type="text"
-                        value={transferData.targetUrl}
-                        onChange={(e) => setTransferData({ ...transferData, targetUrl: e.target.value })}
-                        placeholder="https://platform-b.vercel.app"
-                        className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                      />
-                      <p className="mt-1 text-[11px] text-gray-400">The destination Nexus Esports platform instance endpoint</p>
-                    </div>
-
-                    <div>
-                      <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">API Authentication Key (Optional)</label>
-                      <input
-                        type="password"
-                        value={transferData.apiKey}
-                        onChange={(e) => setTransferData({ ...transferData, apiKey: e.target.value })}
-                        placeholder="••••••••••••••••••••••••••••"
-                        className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-4 py-2.5 text-sm font-semibold text-white transition-all focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                      />
-                      <p className="mt-1 text-[11px] text-gray-400">Required if the destination node enforces secure API handshake</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">Season ID (Optional)</label>
-                        <input
-                          type="text"
-                          value={transferData.seasonId}
-                          onChange={(e) => setTransferData({ ...transferData, seasonId: e.target.value })}
-                          placeholder="Leave blank for full"
-                          className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-sm font-semibold text-white focus:border-indigo-500 focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-bold uppercase tracking-wider text-gray-300 mb-1.5">Tournament IDs (Optional)</label>
-                        <input
-                          type="text"
-                          value={transferData.tournamentIds}
-                          onChange={(e) => setTransferData({ ...transferData, tournamentIds: e.target.value })}
-                          placeholder="id1, id2, id3"
-                          className="min-h-[44px] w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-sm font-semibold text-white focus:border-indigo-500 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleTransfer}
-                      className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 font-bold text-white shadow-lg shadow-purple-600/30 transition-all hover:from-purple-500 hover:to-indigo-500 active:scale-95"
-                    >
-                      <Cloud className="h-4 w-4" />
-                      <span>Start Node Transfer</span>
-                    </button>
-                    <button
-                      onClick={() => setShowTransferModal(false)}
-                      className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/[0.08] font-bold text-gray-300 transition-all hover:bg-white/15 hover:text-white active:scale-95"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
+          {showTransferModal && (
+            <TransferModal
+              transferData={transferData}
+              setTransferData={setTransferData}
+              onClose={() => setShowTransferModal(false)}
+              onTransfer={handleTransfer}
+            />
+          )}
         </div>
-      </motion.div>
+      </div>
     </>
   );
 }

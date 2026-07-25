@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useCallback,useEffect, memo } from "react";
 import {
   Upload,
   X,
@@ -33,6 +32,108 @@ interface FileAttachmentProps {
   className?: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC File Icon ===
+const FileIcon = memo(({ mimeType }: { mimeType: string }) => {
+  if (mimeType.includes("pdf")) return <FileText className="h-5 w-5 text-red-400" />;
+  if (mimeType.includes("image")) return <FileImage className="h-5 w-5 text-blue-400" />;
+  return <File className="h-5 w-5 text-gray-400" />;
+});
+
+FileIcon.displayName = "FileIcon";
+
+// === STATIC File Color ===
+const getFileColor = (mimeType: string) => {
+  if (mimeType.includes("pdf")) return "border-red-500/20 bg-red-500/5";
+  if (mimeType.includes("image")) return "border-blue-500/20 bg-blue-500/5";
+  return "border-white/10 bg-gray-800/30";
+};
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Attachment Item                          */
+/* -------------------------------------------------------------------------- */
+
+const AttachmentItem = memo(({ 
+  attachment, 
+  onRemove 
+}: { 
+  attachment: Attachment; 
+  onRemove: (id: string) => void;
+}) => {
+  const handleRemove = useCallback(() => {
+    onRemove(attachment.id);
+  }, [onRemove, attachment.id]);
+
+  return (
+    <div className={cn(
+      "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-150",
+      getFileColor(attachment.mimeType)
+    )}>
+      <FileIcon mimeType={attachment.mimeType} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-white">
+          {attachment.fileName}
+        </p>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span>{formatFileSize(attachment.fileSize)}</span>
+          <span>•</span>
+          <span>{attachment.mimeType.split("/")[1] || "File"}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        <a
+          href={attachment.fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg text-gray-400 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+        >
+          <Eye className="h-4 w-4" />
+        </a>
+        <button
+          onClick={handleRemove}
+          className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg text-gray-400 transition-colors duration-150 hover:bg-red-500/10 hover:text-red-400"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
+AttachmentItem.displayName = "AttachmentItem";
+
+/* -------------------------------------------------------------------------- */
+/*                               Main Component                               */
+/* -------------------------------------------------------------------------- */
+
 export default function FileAttachment({
   onAttachmentsChange,
   maxFiles = 5,
@@ -40,11 +141,12 @@ export default function FileAttachment({
   disabled = false,
   className = "",
 }: FileAttachmentProps) {
+  const isMobile = useIsMobile();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
-  const handleFileUpload = async (files: FileList) => {
+  const handleFileUpload = useCallback(async (files: FileList) => {
     if (attachments.length >= maxFiles) {
       toast.error(`Maximum ${maxFiles} files allowed`);
       return;
@@ -93,66 +195,61 @@ export default function FileAttachment({
     } finally {
       setUploading(false);
     }
-  };
+  }, [attachments, maxFiles, maxSize, onAttachmentsChange]);
 
-  const removeAttachment = (id: string) => {
+  const removeAttachment = useCallback((id: string) => {
     const updated = attachments.filter((a) => a.id !== id);
     setAttachments(updated);
     onAttachmentsChange(updated);
-  };
+  }, [attachments, onAttachmentsChange]);
 
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.includes("pdf")) return <FileText className="h-5 w-5 text-red-400" />;
-    if (mimeType.includes("image")) return <FileImage className="h-5 w-5 text-blue-400" />;
-    return <File className="h-5 w-5 text-gray-400" />;
-  };
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
 
-  const getFileColor = (mimeType: string) => {
-    if (mimeType.includes("pdf")) return "border-red-500/20 bg-red-500/5";
-    if (mimeType.includes("image")) return "border-blue-500/20 bg-blue-500/5";
-    return "border-white/10 bg-gray-800/30";
-  };
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  }, []);
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (!disabled && e.dataTransfer.files.length && attachments.length < maxFiles) {
+      handleFileUpload(e.dataTransfer.files);
+    }
+  }, [disabled, attachments.length, maxFiles, handleFileUpload]);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
+      handleFileUpload(e.target.files);
+    }
+    e.target.value = "";
+  }, [handleFileUpload]);
+
+  const isFull = attachments.length >= maxFiles;
 
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Upload Area */}
+      {/* Upload Area - NO animations */}
       <div
         className={cn(
-          "relative rounded-xl border-2 border-dashed p-6 text-center transition-all",
+          "relative rounded-xl border-2 border-dashed p-6 text-center transition-colors duration-150",
           dragOver
             ? "border-indigo-500 bg-indigo-500/10"
             : "border-white/10 bg-gray-800/30 hover:border-indigo-500/30 hover:bg-indigo-500/5",
           disabled && "opacity-50 cursor-not-allowed",
-          attachments.length >= maxFiles && "opacity-50 cursor-not-allowed"
+          isFull && "opacity-50 cursor-not-allowed"
         )}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          if (!disabled && e.dataTransfer.files.length && attachments.length < maxFiles) {
-            handleFileUpload(e.dataTransfer.files);
-          }
-        }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <input
           type="file"
-          onChange={(e) => {
-            if (e.target.files?.length) {
-              handleFileUpload(e.target.files);
-            }
-            e.target.value = "";
-          }}
-          disabled={disabled || uploading || attachments.length >= maxFiles}
+          onChange={handleFileChange}
+          disabled={disabled || uploading || isFull}
           className="absolute inset-0 cursor-pointer opacity-0"
           accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.docx,.zip,.txt"
         />
@@ -166,11 +263,11 @@ export default function FileAttachment({
           ) : (
             <>
               <div className={cn(
-                "rounded-full p-3 transition-all",
+                "rounded-full p-3 transition-colors duration-150",
                 dragOver ? "bg-indigo-500/30" : "bg-indigo-500/20"
               )}>
                 {dragOver ? (
-                  <Upload className="h-6 w-6 text-indigo-400 animate-bounce" />
+                  <Upload className="h-6 w-6 text-indigo-400" />
                 ) : (
                   <Paperclip className="h-6 w-6 text-indigo-400" />
                 )}
@@ -192,59 +289,19 @@ export default function FileAttachment({
         </div>
       </div>
 
-      {/* Attachment List */}
-      <AnimatePresence>
-        {attachments.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-2"
-          >
-            <p className="text-xs font-medium text-gray-400">Attached Files</p>
-            {attachments.map((attachment) => (
-              <motion.div
-                key={attachment.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all",
-                  getFileColor(attachment.mimeType)
-                )}
-              >
-                {getFileIcon(attachment.mimeType)}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-white">
-                    {attachment.fileName}
-                  </p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>{formatFileSize(attachment.fileSize)}</span>
-                    <span>•</span>
-                    <span>{attachment.mimeType.split("/")[1] || "File"}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <a
-                    href={attachment.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </a>
-                  <button
-                    onClick={() => removeAttachment(attachment.id)}
-                    className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Attachment List - NO animations */}
+      {attachments.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-400">Attached Files</p>
+          {attachments.map((attachment) => (
+            <AttachmentItem
+              key={attachment.id}
+              attachment={attachment}
+              onRemove={removeAttachment}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

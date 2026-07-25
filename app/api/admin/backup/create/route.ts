@@ -1,9 +1,14 @@
-// app/api/admin/backup/create/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { backupWorker } from "@/lib/services/backup.worker";
 import { prisma } from "@/lib/prisma";
+
+// ✅ Lazy load the backup worker to avoid tracing issues
+async function getBackupWorker() {
+  // ✅ Dynamic import with webpack ignore to prevent tracing
+  const { backupWorker } = await import(/* webpackIgnore: true */ '@/lib/services/backup.worker');
+  return backupWorker;
+}
 
 export async function POST(request: Request) {
   try {
@@ -59,14 +64,28 @@ export async function POST(request: Request) {
       }
     });
 
-    // ✅ Run backup asynchronously
-    backupWorker.performBackup(backup.id, adminUser.id)
-      .then(() => {
+    // ✅ Load the backup worker lazily and run backup asynchronously
+    (async () => {
+      try {
+        const worker = await getBackupWorker();
+        await worker.performBackup(backup.id, adminUser.id);
         console.log(`✅ Backup ${backup.id} completed successfully`);
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error(`❌ Backup ${backup.id} failed:`, error);
-      });
+        
+        // ✅ Update backup status to failed
+        await prisma.backup.update({
+          where: { id: backup.id },
+          data: { 
+            status: "FAILED",
+            metadata: {
+              error: error instanceof Error ? error.message : 'Unknown error',
+              failedAt: new Date().toISOString()
+            }
+          }
+        });
+      }
+    })();
 
     return NextResponse.json({
       success: true,

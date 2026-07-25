@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useEffect, useState, useMemo, useCallback,memo } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import {
   Camera,
   Edit2,
@@ -26,9 +26,9 @@ import {
   Users,
   Flame,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { motion, type Variants } from "framer-motion";
 import TrustBadge from "@/components/ui/TrustBadge";
 import Image from "next/image";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -61,134 +61,111 @@ interface ProfileData {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
+      <div className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-pink-500/10 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage:
+            "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Stat Card ===
 const StatCard = memo(({ stat }: { stat: any }) => {
   const Icon = stat.icon;
   return (
-    <motion.div
-      variants={statCardVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
-      className="will-change-transform"
-    >
-      <div className={`rounded-2xl border border-white/10 ${stat.bg} p-4 text-center backdrop-blur-xl`}>
-        <div className={`mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900/40 ring-1 ${stat.ring}`}>
-          <Icon className={`h-5 w-5 ${stat.tint}`} />
-        </div>
-        <p className={`text-2xl font-bold ${stat.tint}`}>{stat.value}</p>
-        <p className="mt-1 text-xs text-gray-400">{stat.label}</p>
+    <div className={`rounded-2xl border border-white/10 ${stat.bg} p-4 text-center backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/30`}>
+      <div className={`mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900/40 ring-1 ${stat.ring}`}>
+        <Icon className={`h-5 w-5 ${stat.tint}`} />
       </div>
-    </motion.div>
+      <p className={`text-2xl font-bold ${stat.tint}`}>{stat.value}</p>
+      <p className="mt-1 text-xs text-gray-400">{stat.label}</p>
+    </div>
   );
 });
 
 StatCard.displayName = "StatCard";
 
+// === STATIC Detail Stat ===
 const DetailStat = memo(({ stat }: { stat: any }) => (
-  <motion.div
-    variants={itemVariants}
-    className={`rounded-xl border ${stat.border} ${stat.bg} p-3 text-center backdrop-blur-sm`}
-  >
+  <div className={`rounded-xl border ${stat.border} ${stat.bg} p-3 text-center backdrop-blur-sm transition-colors duration-150 hover:border-indigo-500/30`}>
     <p className="text-xs text-gray-500">{stat.label}</p>
     <p className={`text-lg font-bold ${stat.tint}`}>{stat.value}</p>
-  </motion.div>
+  </div>
 ));
 
 DetailStat.displayName = "DetailStat";
 
+// === STATIC Detail Chip ===
 const DetailChip = memo(({ chip }: { chip: any }) => {
   const Icon = chip.icon;
   return (
-    <motion.div
-      variants={itemVariants}
-      className="rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-xl transition hover:border-white/20"
-    >
+    <div className="rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-xl transition-colors duration-150 hover:border-white/20">
       <div className="flex items-center gap-1.5">
         <Icon className={`h-3.5 w-3.5 ${chip.accent}`} />
         <p className="text-xs text-gray-500">{chip.label}</p>
       </div>
       <p className={`mt-1 text-sm font-semibold ${chip.accent}`}>{chip.value}</p>
-    </motion.div>
+    </div>
   );
 });
 
 DetailChip.displayName = "DetailChip";
 
 /* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-    <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-pink-500/10 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.03]"
-      style={{
-        backgroundImage:
-          "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
-        backgroundSize: "60px 60px",
-      }}
-    />
-  </div>
-));
-
-DecorBackground.displayName = "DecorBackground";
-
-/* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function ProfilePage() {
   const { data: session } = useSession();
+  const isMobile = useIsMobile();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [trustScore, setTrustScore] = useState<number>(0);
@@ -314,7 +291,7 @@ export default function ProfilePage() {
     return (
       <>
         <DecorBackground />
-        <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64 px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20" />
@@ -335,17 +312,9 @@ export default function ProfilePage() {
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="max-w-5xl mx-auto space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Banner Section */}
-        <motion.div
-          variants={itemVariants}
-          className="relative h-48 overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 sm:h-56"
-        >
+      <div className="max-w-5xl mx-auto space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Banner Section - NO animations */}
+        <div className="relative h-48 overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 sm:h-56">
           {profile?.bannerImage && (
             <Image
               src={profile.bannerImage || "/default-banner.jpg"}
@@ -354,6 +323,7 @@ export default function ProfilePage() {
               height={300}
               className="h-full w-full object-cover"
               loading="lazy"
+              decoding="async"
             />
           )}
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-t from-gray-900/70 via-gray-900/10 to-transparent" />
@@ -369,17 +339,14 @@ export default function ProfilePage() {
           <Link
             href="/dashboard/profile/edit"
             aria-label="Change banner image"
-            className="absolute bottom-4 right-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-black/50 p-2 text-white backdrop-blur-sm transition hover:bg-black/70"
+            className="absolute bottom-4 right-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-black/50 p-2 text-white backdrop-blur-sm transition-colors duration-150 hover:bg-black/70"
           >
             <Camera size={20} />
           </Link>
-        </motion.div>
+        </div>
 
-        {/* Profile Picture */}
-        <motion.div
-          variants={itemVariants}
-          className="relative mx-6 -mt-16 flex items-end justify-between"
-        >
+        {/* Profile Picture - NO animations */}
+        <div className="relative mx-6 -mt-16 flex items-end justify-between">
           <div className="group relative">
             <div className="h-28 w-28 overflow-hidden rounded-full border-4 border-gray-900 bg-gray-700 shadow-xl shadow-black/40">
               {profile?.profilePicture ? (
@@ -390,6 +357,7 @@ export default function ProfilePage() {
                   height={112}
                   className="h-full w-full object-cover"
                   loading="lazy"
+                  decoding="async"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center bg-gradient-to-br from-indigo-600 to-purple-600 text-3xl font-bold text-white">
@@ -397,25 +365,22 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
-            <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
               <Camera size={22} className="text-white" />
             </div>
             <Link
               href="/dashboard/profile/edit"
               aria-label="Change profile picture"
-              className="absolute bottom-0 right-0 inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 p-1.5 text-white shadow-lg transition hover:from-indigo-500 hover:to-purple-500"
+              className="absolute bottom-0 right-0 inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 p-1.5 text-white shadow-lg transition-colors duration-150 hover:from-indigo-500 hover:to-purple-500"
             >
               <Camera size={14} />
             </Link>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Profile Info */}
+        {/* Profile Info - NO animations */}
         <div className="mt-6 px-6">
-          <motion.div
-            variants={itemVariants}
-            className="flex flex-wrap items-start justify-between gap-4"
-          >
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold text-white sm:text-3xl">
@@ -448,81 +413,70 @@ export default function ProfilePage() {
             </div>
             <Link
               href="/dashboard/profile/edit"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-900/40 transition hover:from-indigo-500 hover:to-purple-500"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-900/40 transition-colors duration-150 hover:from-indigo-500 hover:to-purple-500"
             >
               <Edit2 size={16} />
               Edit Profile
             </Link>
-          </motion.div>
+          </div>
 
-          {/* Trust Score Progress Bar */}
-          <motion.div variants={itemVariants} className="mt-4">
+          {/* Trust Score Progress Bar - NO animation on mobile */}
+          <div className="mt-4">
             <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(displayTrustScore, 100)}%` }}
-                transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
-                className={`h-full rounded-full bg-gradient-to-r ${trustGradient}`}
+              <div
+                className={`h-full rounded-full bg-gradient-to-r ${trustGradient} transition-all duration-300`}
+                style={{ width: `${Math.min(displayTrustScore, 100)}%` }}
               />
             </div>
-          </motion.div>
+          </div>
 
-          {/* Bio */}
+          {/* Bio - NO animations */}
           {profile?.bio && (
-            <motion.div
-              variants={itemVariants}
-              className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl"
-            >
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
               <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                 <UserIcon size={13} />
                 About
               </div>
               <p className="text-gray-300">{profile.bio}</p>
-            </motion.div>
+            </div>
           )}
 
-          {/* Player Details */}
-          <motion.div variants={containerVariants} className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {/* Player Details - NO animations */}
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {detailChips.map((chip) => (
               <DetailChip key={chip.label} chip={chip} />
             ))}
-          </motion.div>
+          </div>
 
-          {/* Statistics Section */}
+          {/* Statistics Section - NO animations */}
           <div className="mt-8">
-            <motion.h2
-              variants={itemVariants}
-              className="mb-4 flex items-center gap-2 text-xl font-bold text-white"
-            >
+            <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-white">
               <TrendingUp className="h-5 w-5 text-indigo-400" />
               Player Statistics
-            </motion.h2>
+            </h2>
 
-            {/* Primary Stats */}
-            <motion.div variants={containerVariants} className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* Primary Stats - NO animations */}
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {primaryStats.map((stat) => (
                 <StatCard key={stat.label} stat={stat} />
               ))}
-            </motion.div>
+            </div>
 
-            {/* Detailed Stats */}
-            <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {/* Detailed Stats - NO animations */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {detailStats.map((stat) => (
                 <DetailStat key={stat.label} stat={stat} />
               ))}
-              <motion.div
-                variants={itemVariants}
-                className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-center backdrop-blur-sm"
-              >
+              <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-center backdrop-blur-sm transition-colors duration-150 hover:border-indigo-500/30">
                 <p className="text-xs text-gray-500">Goal Diff</p>
                 <p className={`text-lg font-bold ${goalDiff >= 0 ? "text-green-400" : "text-red-400"}`}>
                   {goalDiff >= 0 ? `+${goalDiff}` : goalDiff}
                 </p>
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
           </div>
         </div>
-      </motion.div>
+      </div>
     </>
   );
 }

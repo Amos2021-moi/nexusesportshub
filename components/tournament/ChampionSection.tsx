@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import {
   Trophy,
   Crown,
@@ -10,8 +10,8 @@ import {
   Shield,
   Target,
   Sparkles,
+  Loader2,
 } from "lucide-react";
-import { motion } from "framer-motion";
 
 interface ChampionSectionProps {
   champion: {
@@ -34,28 +34,118 @@ interface ChampionStats {
   awards: string[];
 }
 
+/* -------------------------------------------------------------------------- */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Stat Box ===
+const StatBox = memo(({ 
+  value, 
+  label, 
+  color = "text-white" 
+}: { 
+  value: string | number; 
+  label: string; 
+  color?: string;
+}) => (
+  <div className="rounded-lg border border-white/10 bg-white/5 p-2 ring-1 ring-white/5">
+    <p className={`text-lg font-bold ${color}`}>{value}</p>
+    <p className="text-[8px] uppercase tracking-wider text-gray-400">{label}</p>
+  </div>
+));
+
+StatBox.displayName = "StatBox";
+
+// === STATIC Award Badge ===
+const AwardBadge = memo(({ 
+  award, 
+  icon: Icon 
+}: { 
+  award: string; 
+  icon: React.ReactNode;
+}) => (
+  <span className="inline-flex items-center gap-1 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 py-0.5 text-[10px] text-yellow-400">
+    {Icon}
+    {award}
+  </span>
+));
+
+AwardBadge.displayName = "AwardBadge";
+
+// === STATIC Loading Spinner ===
+const LoadingSpinner = memo(() => {
+  const isMobile = useIsMobile();
+  const spinClass = isMobile ? "" : "animate-spin";
+
+  return (
+    <div className="relative mb-6 overflow-hidden rounded-2xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/20 via-amber-500/20 to-yellow-500/20 p-6 text-center backdrop-blur-xl">
+      <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-yellow-500/10" />
+      <div className="relative z-10">
+        <div className={`mx-auto mb-2 h-10 w-10 rounded-full border-[3px] border-yellow-500/30 border-t-yellow-500 ${spinClass}`} />
+        <p className="text-xs text-gray-400">Loading champion stats...</p>
+      </div>
+    </div>
+  );
+});
+
+LoadingSpinner.displayName = "LoadingSpinner";
+
+/* -------------------------------------------------------------------------- */
+/*                           Helper Functions                                */
+/* -------------------------------------------------------------------------- */
+
+const awardIcons: Record<string, React.ReactNode> = {
+  Champion: <Crown className="h-3 w-3 text-yellow-500" />,
+  "Golden Boot": <Trophy className="h-3 w-3 text-orange-500" />,
+  "Golden Glove": <Shield className="h-3 w-3 text-blue-500" />,
+  "Player of the Season": <Star className="h-3 w-3 text-purple-500" />,
+  "Most Improved": <TrendingUp className="h-3 w-3 text-green-500" />,
+  "Best Newcomer": <Sparkles className="h-3 w-3 text-pink-500" />,
+  "Top Playmaker": <Target className="h-3 w-3 text-red-500" />,
+};
+
+/* -------------------------------------------------------------------------- */
+/*                           Main Component                                  */
+/* -------------------------------------------------------------------------- */
+
 export default function ChampionSection({
   champion,
   tournamentName,
   tournamentId,
 }: ChampionSectionProps) {
+  const isMobile = useIsMobile();
   const [stats, setStats] = useState<ChampionStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (champion?.id && tournamentId) {
-      fetchChampionStats();
-    } else {
+  const fetchChampionStats = useCallback(async () => {
+    if (!champion?.id || !tournamentId) {
       setLoading(false);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [champion, tournamentId]);
 
-  async function fetchChampionStats() {
     try {
       setLoading(true);
       const res = await fetch(
-        `/api/tournaments/${tournamentId}/champion-stats?playerId=${champion?.id}`
+        `/api/tournaments/${tournamentId}/champion-stats?playerId=${champion.id}`
       );
 
       if (!res.ok) {
@@ -79,25 +169,21 @@ export default function ChampionSection({
     } finally {
       setLoading(false);
     }
-  }
+  }, [champion, tournamentId]);
+
+  useEffect(() => {
+    fetchChampionStats();
+  }, [fetchChampionStats]);
 
   if (!champion) {
     return null;
   }
 
-  const championName =
-    champion.profile?.username || champion.name || "Champion";
+  const championName = champion.profile?.username || champion.name || "Champion";
 
+  // ✅ Loading state
   if (loading) {
-    return (
-      <div className="relative mb-6 overflow-hidden rounded-2xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/20 via-amber-500/20 to-yellow-500/20 p-6 text-center backdrop-blur-xl">
-        <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-yellow-500/10" />
-        <div className="relative z-10">
-          <div className="mx-auto mb-2 h-10 w-10 animate-spin rounded-full border-[3px] border-yellow-500/30 border-t-yellow-500" />
-          <p className="text-xs text-gray-400">Loading champion stats...</p>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   const displayStats = stats || {
@@ -111,101 +197,35 @@ export default function ChampionSection({
     awards: ["Champion"],
   };
 
-  const awardIcons: Record<string, React.ReactNode> = {
-    Champion: <Crown className="h-3 w-3 text-yellow-500" />,
-    "Golden Boot": <Trophy className="h-3 w-3 text-orange-500" />,
-    "Golden Glove": <Shield className="h-3 w-3 text-blue-500" />,
-    "Player of the Season": <Star className="h-3 w-3 text-purple-500" />,
-    "Most Improved": <TrendingUp className="h-3 w-3 text-green-500" />,
-    "Best Newcomer": <Sparkles className="h-3 w-3 text-pink-500" />,
-    "Top Playmaker": <Target className="h-3 w-3 text-red-500" />,
-  };
-
+  // ✅ Static rendering - NO animations
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-      className="relative mb-6 overflow-hidden rounded-2xl border border-yellow-500/30 bg-gradient-to-br from-yellow-500/10 via-amber-500/10 to-orange-500/10 p-5 text-center shadow-2xl shadow-yellow-500/15 backdrop-blur-xl"
-    >
-      {/* Animated Background */}
+    <div className="relative mb-6 overflow-hidden rounded-2xl border border-yellow-500/30 bg-gradient-to-br from-yellow-500/10 via-amber-500/10 to-orange-500/10 p-5 text-center shadow-2xl shadow-yellow-500/15 backdrop-blur-xl">
+      {/* Static Background - NO animations on mobile */}
       <div className="absolute inset-0">
-        <motion.div
-          className="absolute -left-20 -top-20 h-48 w-48 rounded-full bg-yellow-500/15 blur-3xl"
-          animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.85, 0.5] }}
-          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute -bottom-20 -right-20 h-48 w-48 rounded-full bg-amber-500/15 blur-3xl"
-          animate={{ scale: [1, 1.25, 1], opacity: [0.4, 0.8, 0.4] }}
-          transition={{
-            duration: 6,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 1,
-          }}
-        />
-
-        {/* Floating particles */}
-        {[
-          { top: "12%", left: "10%", size: 8, delay: 0, color: "bg-yellow-400/50" },
-          { top: "18%", right: "12%", size: 8, delay: 1, color: "bg-amber-400/50" },
-          { bottom: "14%", left: "25%", size: 6, delay: 0.5, color: "bg-yellow-300/50" },
-          { bottom: "22%", right: "30%", size: 8, delay: 1.5, color: "bg-amber-300/50" },
-          { top: "40%", left: "6%", size: 5, delay: 0.8, color: "bg-yellow-400/40" },
-          { top: "55%", right: "8%", size: 6, delay: 1.2, color: "bg-amber-400/40" },
-        ].map((p, i) => (
-          <motion.span
-            key={i}
-            className={`absolute rounded-full ${p.color}`}
-            style={{
-              top: p.top,
-              left: p.left,
-              right: p.right,
-              bottom: p.bottom,
-              width: p.size,
-              height: p.size,
-            }}
-            animate={{ y: [0, -12, 0], scale: [1, 1.3, 1], opacity: [0.3, 0.7, 0.3] }}
-            transition={{
-              duration: 2.5,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: p.delay,
-            }}
-          />
-        ))}
+        <div className="absolute -left-20 -top-20 h-48 w-48 rounded-full bg-yellow-500/15 blur-3xl" />
+        <div className="absolute -bottom-20 -right-20 h-48 w-48 rounded-full bg-amber-500/15 blur-3xl" />
       </div>
 
       <div className="relative z-10">
         {/* Champion Badge */}
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 16 }}
-          className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-yellow-500/30 bg-yellow-500/20 px-3 py-1 ring-1 ring-yellow-400/20"
-        >
+        <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-yellow-500/30 bg-yellow-500/20 px-3 py-1 ring-1 ring-yellow-400/20">
           <Crown className="h-3.5 w-3.5 text-yellow-500" />
           <span className="text-[10px] font-semibold uppercase tracking-wider text-yellow-400">
             Champion
           </span>
-        </motion.div>
+        </div>
 
         {/* Champion Profile */}
         <div className="mb-3 flex items-center justify-center gap-4">
           <div className="relative">
-            <motion.div
-              className="absolute -inset-1 rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 opacity-50 blur-sm"
-              animate={{ opacity: [0.4, 0.7, 0.4], scale: [1, 1.08, 1] }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            />
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 opacity-50 blur-sm" />
             <div className="relative">
               {champion.profile?.profilePicture ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={champion.profile.profilePicture}
                   alt={championName}
                   className="h-14 w-14 rounded-full border-2 border-yellow-500 object-cover"
+                  loading="lazy"
                 />
               ) : (
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 text-xl font-bold text-white shadow-lg shadow-yellow-500/20">
@@ -213,20 +233,10 @@ export default function ChampionSection({
                 </div>
               )}
             </div>
-            {/* Small crown badge */}
-            <motion.div
-              initial={{ scale: 0, rotate: -30 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{
-                delay: 0.4,
-                type: "spring",
-                stiffness: 400,
-                damping: 12,
-              }}
-              className="absolute -right-0.5 -top-2 rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 p-1 shadow-lg shadow-yellow-500/30"
-            >
+            {/* Small crown badge - NO animation */}
+            <div className="absolute -right-0.5 -top-2 rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 p-1 shadow-lg shadow-yellow-500/30">
               <Crown className="h-3.5 w-3.5 text-white" />
-            </motion.div>
+            </div>
           </div>
 
           <div className="text-left">
@@ -234,7 +244,6 @@ export default function ChampionSection({
               {championName}
             </h2>
             <p className="text-[10px] text-gray-400">{tournamentName}</p>
-            {/* Hall of Fame induction badge */}
             <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-purple-300 ring-1 ring-purple-500/30">
               <Star className="h-2.5 w-2.5 fill-purple-300 text-purple-300" />
               Hall of Fame
@@ -242,39 +251,12 @@ export default function ChampionSection({
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Grid - NO animations */}
         <div className="mx-auto grid max-w-sm grid-cols-4 gap-2">
-          {[
-            { value: displayStats.wins, label: "Wins", color: "text-yellow-400" },
-            {
-              value: `${displayStats.winRate}%`,
-              label: "Win Rate",
-              color: "text-green-400",
-            },
-            {
-              value: displayStats.goalsFor,
-              label: "Goals",
-              color: "text-blue-400",
-            },
-            {
-              value: displayStats.matchesPlayed,
-              label: "Matches",
-              color: "text-white",
-            },
-          ].map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + i * 0.08 }}
-              className="rounded-lg border border-white/10 bg-white/5 p-2 ring-1 ring-white/5"
-            >
-              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-[8px] uppercase tracking-wider text-gray-400">
-                {s.label}
-              </p>
-            </motion.div>
-          ))}
+          <StatBox value={displayStats.wins} label="Wins" color="text-yellow-400" />
+          <StatBox value={`${displayStats.winRate}%`} label="Win Rate" color="text-green-400" />
+          <StatBox value={displayStats.goalsFor} label="Goals" color="text-blue-400" />
+          <StatBox value={displayStats.matchesPlayed} label="Matches" color="text-white" />
         </div>
 
         {/* Goal Difference */}
@@ -299,7 +281,7 @@ export default function ChampionSection({
           </div>
         )}
 
-        {/* Awards */}
+        {/* Awards - NO animations */}
         {displayStats.awards && displayStats.awards.length > 0 && (
           <div className="mt-3 border-t border-white/10 pt-2">
             <div className="flex flex-wrap justify-center gap-1.5">
@@ -308,16 +290,7 @@ export default function ChampionSection({
                   <Award className="h-3 w-3 text-gray-400" />
                 );
                 return (
-                  <motion.span
-                    key={index}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.6 + index * 0.08 }}
-                    className="inline-flex items-center gap-1 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 py-0.5 text-[10px] text-yellow-400"
-                  >
-                    {Icon}
-                    {award}
-                  </motion.span>
+                  <AwardBadge key={index} award={award} icon={Icon} />
                 );
               })}
               {displayStats.awards.length > 4 && (
@@ -329,6 +302,6 @@ export default function ChampionSection({
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -12,7 +12,6 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast";
 import {
   Shield,
@@ -59,10 +58,6 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DEFAULT_PLAYER_REDIRECT = "/dashboard";
 const ADMIN_REDIRECT = "/admin";
 
-/**
- * Maps NextAuth error codes (passed via the `?error=` query param on the
- * callback URL) to user-friendly messages.
- */
 const ERROR_MESSAGES: Record<string, string> = {
   CredentialsSignin: "Invalid email or password. Please try again.",
   OAuthSignin: "Couldn't start the sign-in flow. Please try again.",
@@ -89,14 +84,12 @@ function getGreeting(): string {
 }
 
 function resolveRedirect(role: string | undefined, callbackUrl: string): string {
-  // Honour an explicit, safe callbackUrl first.
   if (callbackUrl && callbackUrl !== "/" && isSafeRelativeUrl(callbackUrl)) {
     return callbackUrl;
   }
   return role === "ADMIN" ? ADMIN_REDIRECT : DEFAULT_PLAYER_REDIRECT;
 }
 
-/** Only allow same-origin relative paths to avoid open-redirect attacks. */
 function isSafeRelativeUrl(url: string): boolean {
   return url.startsWith("/") && !url.startsWith("//");
 }
@@ -144,57 +137,70 @@ const FacebookIcon = memo(function FacebookIcon({ className }: { className?: str
 FacebookIcon.displayName = "FacebookIcon";
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.5, ease: "easeOut", staggerChildren: 0.07 },
-  },
-} as const;
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
-} as const;
-
-const backgroundOrbVariants: Variants = {
-  animate: {
-    scale: [1, 1.2, 1],
-    opacity: [0.3, 0.5, 0.3],
-    transition: { duration: 8, repeat: Infinity, ease: "easeInOut" },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
-const BackgroundOrbs = memo(function BackgroundOrbs() {
+function BackgroundOrbs() {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
+        <div
+          aria-hidden="true"
+          className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-600/25 blur-[120px]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-purple-600/25 blur-[120px]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)",
+            backgroundSize: "48px 48px",
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="pointer-events-none absolute inset-0">
       <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
-      <motion.div
+      <div
         aria-hidden="true"
-        variants={backgroundOrbVariants}
-        animate="animate"
         className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-600/25 blur-[120px]"
       />
-      <motion.div
+      <div
         aria-hidden="true"
-        variants={backgroundOrbVariants}
-        animate="animate"
-        transition={{ duration: 10, delay: 1 }}
         className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-purple-600/25 blur-[120px]"
       />
-      <motion.div
+      <div
         aria-hidden="true"
-        variants={backgroundOrbVariants}
-        animate="animate"
-        transition={{ duration: 12, delay: 2 }}
         className="absolute top-1/2 left-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-500/10 blur-[120px]"
       />
       <div
@@ -208,9 +214,7 @@ const BackgroundOrbs = memo(function BackgroundOrbs() {
       />
     </div>
   );
-});
-
-BackgroundOrbs.displayName = "BackgroundOrbs";
+}
 
 /* -------------------------------------------------------------------------- */
 /*                            Main Sign In Form                                */
@@ -220,6 +224,7 @@ function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
+  const isMobile = useIsMobile();
 
   const callbackUrl = searchParams?.get("callbackUrl") ?? "";
   const urlError = searchParams?.get("error") ?? "";
@@ -234,19 +239,11 @@ function SignInForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
   const [greeting, setGreeting] = useState("Welcome back");
-  const [isMobile, setIsMobile] = useState(false);
 
-  /* Set the greeting on mount (avoids SSR/CSR mismatch). */
   useEffect(() => {
     setGreeting(getGreeting());
-    setIsMobile(window.innerWidth < 768);
-    
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  /* Surface OAuth / callback errors arriving via the query string. */
   useEffect(() => {
     if (urlError) {
       toast.error(ERROR_MESSAGES[urlError] ?? ERROR_MESSAGES.default, {
@@ -255,15 +252,12 @@ function SignInForm() {
     }
   }, [urlError]);
 
-  /* If a session already exists, route the user onward immediately. */
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
       const role = (session.user as SessionUser).role;
       router.replace(resolveRedirect(role, callbackUrl));
     }
   }, [status, session, router, callbackUrl]);
-
-  /* ----------------------------- Validation ----------------------------- */
 
   const validate = useCallback((): boolean => {
     const next: FormErrors = {};
@@ -282,15 +276,12 @@ function SignInForm() {
     return Object.keys(next).length === 0;
   }, [form.email, form.password]);
 
-  /* ----------------------------- Handlers ------------------------------- */
-
   const handleChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setForm((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-    // Clear the field-level error as the user types.
     if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -328,8 +319,6 @@ function SignInForm() {
 
       toast.success("Signed in successfully. Redirecting…");
 
-      // Determine destination from the fresh session so role-based
-      // routing works correctly.
       let role: string | undefined;
       try {
         const res = await fetch("/api/auth/session");
@@ -339,11 +328,7 @@ function SignInForm() {
         /* fall back to default redirect below */
       }
 
-      const destination =
-        result.url && isSafeRelativeUrl(new URL(result.url, window.location.origin).pathname)
-          ? resolveRedirect(role, callbackUrl)
-          : resolveRedirect(role, callbackUrl);
-
+      const destination = resolveRedirect(role, callbackUrl);
       router.push(destination);
       router.refresh();
     } catch {
@@ -357,7 +342,6 @@ function SignInForm() {
     if (isSubmitting || oauthLoading) return;
     setOauthLoading(provider);
     try {
-      // For OAuth we let NextAuth handle the full-page redirect flow.
       await signIn(provider, {
         callbackUrl: callbackUrl || DEFAULT_PLAYER_REDIRECT,
       });
@@ -368,8 +352,6 @@ function SignInForm() {
   }
 
   const busy = isSubmitting || oauthLoading !== null;
-
-  /* ------------------------------- Render ------------------------------- */
 
   return (
     <main className="relative min-h-screen min-h-[100dvh] w-full overflow-hidden bg-gray-950 text-white">
@@ -389,19 +371,10 @@ function SignInForm() {
 
       <BackgroundOrbs />
 
-      {/* Content */}
       <div className="relative z-10 flex min-h-screen min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="w-full max-w-md"
-        >
-          {/* Brand */}
-          <motion.div
-            variants={itemVariants}
-            className="mb-6 flex flex-col items-center text-center sm:mb-8"
-          >
+        <div className="w-full max-w-md">
+          {/* Brand - NO animations */}
+          <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
             <div className="relative mb-3 sm:mb-4">
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 blur-md opacity-60" />
               <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 shadow-lg shadow-indigo-900/50 sm:h-16 sm:w-16">
@@ -414,11 +387,10 @@ function SignInForm() {
             <p className="mt-0.5 text-xs text-gray-400 sm:text-sm">
               {greeting} — sign in to continue
             </p>
-          </motion.div>
+          </div>
 
-          {/* Glass card - Mobile optimized */}
-          <motion.div
-            variants={itemVariants}
+          {/* Glass card - NO animations */}
+          <div
             className="rounded-2xl border border-white/10 bg-gray-800/40 p-5 shadow-2xl backdrop-blur-xl sm:p-8"
             style={{
               backdropFilter: isMobile ? "blur(8px)" : "blur(16px)",
@@ -432,30 +404,25 @@ function SignInForm() {
               </p>
             </div>
 
-            {/* URL-level error banner */}
-            <AnimatePresence>
-              {urlError && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300 sm:text-sm"
-                  role="alert"
-                >
-                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                  <span>{ERROR_MESSAGES[urlError] ?? ERROR_MESSAGES.default}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* URL-level error banner - NO animations */}
+            {urlError && (
+              <div
+                className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300 sm:text-sm"
+                role="alert"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <span>{ERROR_MESSAGES[urlError] ?? ERROR_MESSAGES.default}</span>
+              </div>
+            )}
 
-            {/* Social logins - Mobile responsive */}
+            {/* Social logins - NO animations */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => handleOAuthSignIn("google")}
                 disabled={busy}
                 aria-label="Sign in with Google"
-                className="group flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
+                className="group flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white transition-colors duration-150 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
               >
                 {oauthLoading === "google" ? (
                   <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" />
@@ -471,7 +438,7 @@ function SignInForm() {
                 onClick={() => handleOAuthSignIn("facebook")}
                 disabled={busy}
                 aria-label="Sign in with Facebook"
-                className="group flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
+                className="group flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white transition-colors duration-150 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:py-2.5 sm:text-sm"
               >
                 {oauthLoading === "facebook" ? (
                   <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" />
@@ -483,7 +450,7 @@ function SignInForm() {
               </button>
             </div>
 
-            {/* Divider */}
+            {/* Divider - NO animations */}
             <div className="my-4 flex items-center gap-3 sm:my-6">
               <div className="h-px flex-1 bg-white/10" />
               <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500 sm:text-xs">
@@ -492,7 +459,7 @@ function SignInForm() {
               <div className="h-px flex-1 bg-white/10" />
             </div>
 
-            {/* Credentials form */}
+            {/* Credentials form - NO animations */}
             <form onSubmit={handleCredentialsSignIn} noValidate className="space-y-3 sm:space-y-4">
               {/* Email */}
               <div>
@@ -518,7 +485,7 @@ function SignInForm() {
                     disabled={busy}
                     aria-invalid={!!errors.email}
                     aria-describedby={errors.email ? "email-error" : undefined}
-                    className={`w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
+                    className={`w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 ${
                       errors.email
                         ? "border-red-500/60 focus:ring-red-500/50"
                         : "border-white/10 focus:border-indigo-500/60 focus:ring-indigo-500/50"
@@ -543,7 +510,7 @@ function SignInForm() {
                   </label>
                   <Link
                     href="/auth/forgot-password"
-                    className="text-[10px] font-medium text-indigo-400 transition hover:text-indigo-300 sm:text-xs"
+                    className="text-[10px] font-medium text-indigo-400 transition-colors duration-150 hover:text-indigo-300 sm:text-xs"
                   >
                     Forgot password?
                   </Link>
@@ -565,7 +532,7 @@ function SignInForm() {
                     aria-describedby={
                       errors.password ? "password-error" : undefined
                     }
-                    className={`w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-10 text-sm text-white placeholder-gray-500 transition focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 sm:pr-11 ${
+                    className={`w-full rounded-xl border bg-gray-900/60 py-2 pl-9 pr-10 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:outline-none focus:ring-2 disabled:opacity-60 sm:py-2.5 sm:pl-10 sm:pr-11 ${
                       errors.password
                         ? "border-red-500/60 focus:ring-red-500/50"
                         : "border-white/10 focus:border-indigo-500/60 focus:ring-indigo-500/50"
@@ -577,7 +544,7 @@ function SignInForm() {
                     disabled={busy}
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     aria-pressed={showPassword}
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 transition hover:text-gray-300 focus:outline-none focus:text-indigo-400 disabled:opacity-60"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 transition-colors duration-150 hover:text-gray-300 focus:outline-none focus:text-indigo-400 disabled:opacity-60"
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -593,7 +560,7 @@ function SignInForm() {
                 )}
               </div>
 
-              {/* Remember me */}
+              {/* Remember me - NO animations */}
               <div className="flex items-center">
                 <label
                   htmlFor="rememberMe"
@@ -612,13 +579,11 @@ function SignInForm() {
                 </label>
               </div>
 
-              {/* Submit */}
-              <motion.button
+              {/* Submit - NO animations */}
+              <button
                 type="submit"
                 disabled={busy}
-                whileHover={!busy ? { scale: 1.01 } : undefined}
-                whileTap={!busy ? { scale: 0.99 } : undefined}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:from-indigo-500 hover:to-purple-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-70 sm:py-3"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition-colors duration-150 hover:from-indigo-500 hover:to-purple-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-70 sm:py-3"
               >
                 {isSubmitting ? (
                   <>
@@ -631,46 +596,41 @@ function SignInForm() {
                     <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </>
                 )}
-              </motion.button>
+              </button>
             </form>
 
-            {/* Sign up */}
+            {/* Sign up - NO animations */}
             <p className="mt-4 text-center text-xs text-gray-400 sm:mt-6 sm:text-sm">
               Don&apos;t have an account?{" "}
               <Link
                 href="/auth/signup"
-                className="font-semibold text-indigo-400 transition hover:text-indigo-300"
+                className="font-semibold text-indigo-400 transition-colors duration-150 hover:text-indigo-300"
               >
                 Sign up
               </Link>
             </p>
-          </motion.div>
+          </div>
 
-          <motion.p
-            variants={itemVariants}
-            className="mt-4 text-center text-[10px] text-gray-600 sm:mt-6 sm:text-xs"
-          >
+          {/* Footer - NO animations */}
+          <p className="mt-4 text-center text-[10px] text-gray-600 sm:mt-6 sm:text-xs">
             By signing in, you agree to our{" "}
-            <Link href="/terms" className="text-gray-500 hover:text-gray-400">
+            <Link href="/terms" className="text-gray-500 transition-colors duration-150 hover:text-gray-400">
               Terms
             </Link>{" "}
             &amp;{" "}
-            <Link href="/privacy" className="text-gray-500 hover:text-gray-400">
+            <Link href="/privacy" className="text-gray-500 transition-colors duration-150 hover:text-gray-400">
               Privacy Policy
             </Link>
             .
-          </motion.p>
+          </p>
 
-          {/* Decorative - Premium touch */}
-          <motion.div
-            variants={itemVariants}
-            className="mt-3 flex items-center justify-center gap-1.5 text-[8px] text-gray-700 sm:mt-4 sm:text-[10px]"
-          >
+          {/* Decorative - Premium touch - NO animations */}
+          <div className="mt-3 flex items-center justify-center gap-1.5 text-[8px] text-gray-700 sm:mt-4 sm:text-[10px]">
             <Sparkles className="h-2.5 w-2.5 text-indigo-400/30 sm:h-3 sm:w-3" />
             <span>Secure • Encrypted • Trusted</span>
             <Sparkles className="h-2.5 w-2.5 text-indigo-400/30 sm:h-3 sm:w-3" />
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </div>
     </main>
   );

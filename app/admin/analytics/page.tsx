@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo, memo, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Trophy,
   Calendar,
@@ -34,6 +33,7 @@ import {
   Flame,
   Star,
   Medal,
+  Loader2,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -130,39 +130,24 @@ interface AnalyticsData {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
-  },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
 /*                            Helper Functions                                */
@@ -337,48 +322,67 @@ const doughnutOptions: ChartOptions<"doughnut"> = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Components - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
+// === STATIC Background - NO animations ===
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
+      <div className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+// === STATIC Stat Card ===
 const StatCard = memo(({ stat }: { stat: any }) => {
   const Icon = stat.icon;
   return (
-    <motion.div
-      variants={statCardVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
-      className="will-change-transform"
-    >
-      <div className="group relative h-full min-h-[80px] overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-indigo-500/40">
-        <div
-          className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.color} opacity-20 blur-2xl transition-opacity duration-500 group-hover:opacity-40`}
-        />
-        <div className="relative flex h-full flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <div className={`rounded-xl bg-gradient-to-r ${stat.color} p-2 shadow-lg`}>
-              <Icon className="h-4 w-4 text-white" />
-            </div>
-          </div>
-          <div className="mt-2">
-            <p className="text-2xl font-bold text-white">{stat.value}</p>
-            <p className="mt-0.5 text-xs text-gray-400">{stat.name}</p>
-            <p className="mt-0.5 text-[10px] text-gray-500">{stat.hint}</p>
+    <div className="group relative h-full min-h-[80px] overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/40">
+      <div
+        className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.color} opacity-20 blur-2xl transition-opacity duration-300 group-hover:opacity-40`}
+      />
+      <div className="relative flex h-full flex-col justify-between">
+        <div className="flex items-center justify-between">
+          <div className={`rounded-xl bg-gradient-to-r ${stat.color} p-2 shadow-lg`}>
+            <Icon className="h-4 w-4 text-white" />
           </div>
         </div>
+        <div className="mt-2">
+          <p className="text-2xl font-bold text-white">{stat.value}</p>
+          <p className="mt-0.5 text-xs text-gray-400">{stat.name}</p>
+          <p className="mt-0.5 text-[10px] text-gray-500">{stat.hint}</p>
+        </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
 StatCard.displayName = "StatCard";
 
+// === STATIC Activity Item ===
 const ActivityItem = memo(({ activity }: { activity: any }) => (
-  <motion.div
-    variants={itemVariants}
-    whileHover={{ x: 4 }}
-    className="will-change-transform rounded-xl border border-white/5 bg-gray-900/30 p-3 transition-colors hover:border-indigo-500/20 hover:bg-gray-900/60"
-  >
+  <div className="rounded-xl border border-white/5 bg-gray-900/30 p-3 transition-colors duration-150 hover:border-indigo-500/20 hover:bg-gray-900/60">
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
@@ -395,17 +399,14 @@ const ActivityItem = memo(({ activity }: { activity: any }) => (
         {new Date(activity.createdAt).toLocaleString()}
       </span>
     </div>
-  </motion.div>
+  </div>
 ));
 
 ActivityItem.displayName = "ActivityItem";
 
+// === STATIC Match Item ===
 const MatchItem = memo(({ match }: { match: any }) => (
-  <motion.div
-    variants={itemVariants}
-    whileHover={{ x: 4 }}
-    className="will-change-transform rounded-xl border border-white/5 bg-gray-900/30 p-3 transition-colors hover:border-indigo-500/20 hover:bg-gray-900/60"
-  >
+  <div className="rounded-xl border border-white/5 bg-gray-900/30 p-3 transition-colors duration-150 hover:border-indigo-500/20 hover:bg-gray-900/60">
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="truncate text-sm font-medium text-white">{match.homePlayer}</span>
@@ -421,20 +422,17 @@ const MatchItem = memo(({ match }: { match: any }) => (
         {new Date(match.date).toLocaleDateString()}
       </span>
     </div>
-  </motion.div>
+  </div>
 ));
 
 MatchItem.displayName = "MatchItem";
 
+// === STATIC Insight Card ===
 const InsightCard = memo(({ insight }: { insight: any }) => {
   const style = getInsightStyle(insight.type);
   const Icon = style.icon;
   return (
-    <motion.div
-      variants={itemVariants}
-      whileHover={{ y: -2 }}
-      className={`will-change-transform rounded-xl border p-4 ${style.border} ${style.bg} transition-colors hover:bg-opacity-20`}
-    >
+    <div className={`rounded-xl border p-4 ${style.border} ${style.bg} transition-colors duration-150 hover:bg-opacity-20`}>
       <div className="flex items-start gap-3">
         <Icon className={`mt-0.5 h-5 w-5 flex-shrink-0 ${style.color}`} />
         <div className="min-w-0 flex-1">
@@ -450,50 +448,13 @@ const InsightCard = memo(({ insight }: { insight: any }) => {
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
 InsightCard.displayName = "InsightCard";
 
-/* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.15]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
-    />
-  </div>
-));
-
-DecorBackground.displayName = "DecorBackground";
-
-/* -------------------------------------------------------------------------- */
-/*                            Tab Button Component                            */
-/* -------------------------------------------------------------------------- */
-
+// === STATIC Tab Button ===
 const TabButton = memo(({ tab, activeTab, setActiveTab }: { tab: string; activeTab: string; setActiveTab: (tab: any) => void }) => {
   const labels: Record<string, string> = {
     overview: "📊 Overview",
@@ -504,7 +465,7 @@ const TabButton = memo(({ tab, activeTab, setActiveTab }: { tab: string; activeT
   return (
     <button
       onClick={() => setActiveTab(tab as any)}
-      className={`min-h-[44px] flex-1 rounded-xl px-3 py-2 text-sm font-medium transition-all will-change-transform ${
+      className={`min-h-[44px] flex-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-150 ${
         activeTab === tab
           ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/30"
           : "text-gray-400 hover:bg-white/5 hover:text-white"
@@ -524,6 +485,7 @@ TabButton.displayName = "TabButton";
 export default function AdminAnalyticsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -649,7 +611,7 @@ export default function AdminAnalyticsPage() {
         pointBackgroundColor: "#818cf8",
         pointBorderColor: "rgba(255,255,255,0.9)",
         pointBorderWidth: 2,
-        pointRadius: 0,
+        pointRadius: isMobile ? 0 : 0,
         pointHoverRadius: 6,
         pointHitRadius: 12,
         borderWidth: 2.5,
@@ -700,7 +662,7 @@ export default function AdminAnalyticsPage() {
         pointBackgroundColor: "#34d399",
         pointBorderColor: "rgba(255,255,255,0.9)",
         pointBorderWidth: 2,
-        pointRadius: 0,
+        pointRadius: isMobile ? 0 : 0,
         pointHoverRadius: 6,
         pointHitRadius: 12,
         borderWidth: 2.5,
@@ -716,7 +678,7 @@ export default function AdminAnalyticsPage() {
         pointBackgroundColor: "#fbbf24",
         pointBorderColor: "rgba(255,255,255,0.9)",
         pointBorderWidth: 2,
-        pointRadius: 0,
+        pointRadius: isMobile ? 0 : 0,
         pointHoverRadius: 6,
         pointHitRadius: 12,
         borderWidth: 2,
@@ -733,7 +695,7 @@ export default function AdminAnalyticsPage() {
     return (
       <>
         <DecorBackground />
-        <div className="flex h-96 items-center justify-center">
+        <div className="flex h-96 items-center justify-center px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20" />
@@ -759,7 +721,7 @@ export default function AdminAnalyticsPage() {
     return (
       <>
         <DecorBackground />
-        <div className="flex h-96 items-center justify-center">
+        <div className="flex h-96 items-center justify-center px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20" />
@@ -776,17 +738,9 @@ export default function AdminAnalyticsPage() {
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-cyan-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-cyan-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -797,7 +751,7 @@ export default function AdminAnalyticsPage() {
                 <h1 className="truncate text-xl font-bold text-white sm:text-2xl">
                   🧠 Advanced Analytics
                 </h1>
-                <p className="mt-0.5 text-xs text-gray-300 sm:text-sm">
+                <p className="mt-0.5 truncate text-xs text-gray-300 sm:text-sm">
                   Real-time insights, revenue tracking, and performance metrics
                 </p>
               </div>
@@ -806,31 +760,32 @@ export default function AdminAnalyticsPage() {
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition-all hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 sm:w-auto"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition-all duration-150 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 sm:w-auto"
               >
-                <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+                {refreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
                 {refreshing ? "Refreshing..." : "Refresh Data"}
               </button>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Tab Navigation */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/5 p-1 shadow-2xl backdrop-blur-xl"
-        >
+        {/* Tab Navigation - NO animations */}
+        <div className="flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/5 p-1 shadow-2xl backdrop-blur-xl">
           {(["overview", "revenue", "performance", "insights"] as const).map((tab) => (
             <TabButton key={tab} tab={tab} activeTab={activeTab} setActiveTab={setActiveTab} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Stats Grid - Always Visible */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {/* Stats Grid - Always Visible - NO animations */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {stats.map((stat) => (
             <StatCard key={stat.name} stat={stat} />
           ))}
-        </motion.div>
+        </div>
 
         {/* ============================================================ */}
         {/* TAB: OVERVIEW */}
@@ -838,15 +793,9 @@ export default function AdminAnalyticsPage() {
         {activeTab === "overview" && (
           <>
             {/* Charts Row */}
-            <motion.div
-              variants={containerVariants}
-              className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6"
-            >
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
               {/* User Growth Chart */}
-              <motion.div
-                variants={itemVariants}
-                className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-              >
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
                   <LineChart className="h-4 w-4 text-indigo-400" />
                   User Growth (Last 30 Days)
@@ -854,13 +803,10 @@ export default function AdminAnalyticsPage() {
                 <div className="h-[260px] min-w-0 sm:h-[300px]">
                   <Line data={growthData} options={lineOptions} />
                 </div>
-              </motion.div>
+              </div>
 
               {/* Match Status Chart */}
-              <motion.div
-                variants={itemVariants}
-                className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-              >
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
                   <Activity className="h-4 w-4 text-indigo-400" />
                   Match Status Distribution
@@ -870,15 +816,12 @@ export default function AdminAnalyticsPage() {
                     <Doughnut data={matchStatusData} options={doughnutOptions} />
                   </div>
                 </div>
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
 
             {/* Top Players */}
             {data?.topPlayers && data.topPlayers.length > 0 && (
-              <motion.div
-                variants={itemVariants}
-                className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-              >
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
                   <Crown className="h-4 w-4 text-yellow-400" />
                   Top Players
@@ -897,7 +840,7 @@ export default function AdminAnalyticsPage() {
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {data.topPlayers.map((player, index) => (
-                        <tr key={player.id} className="text-gray-300 transition-colors hover:bg-white/[0.03]">
+                        <tr key={player.id} className="text-gray-300 transition-colors duration-150 hover:bg-white/[0.03]">
                           <td className="sticky left-0 z-10 bg-gray-800/95 px-4 py-3 backdrop-blur-xl">
                             <span className="font-bold text-white">{rankMedal(index)}</span>
                           </td>
@@ -913,16 +856,13 @@ export default function AdminAnalyticsPage() {
                     </tbody>
                   </table>
                 </div>
-              </motion.div>
+              </div>
             )}
 
             {/* Recent Activity & Matches */}
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
               {data?.recentActivity && data.recentActivity.length > 0 && (
-                <motion.div
-                  variants={itemVariants}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-                >
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
                   <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
                     <Zap className="h-4 w-4 text-yellow-400" />
                     Recent Activity
@@ -930,19 +870,16 @@ export default function AdminAnalyticsPage() {
                       {data.recentActivity.length}
                     </span>
                   </h3>
-                  <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 will-change-transform">
-                    {data.recentActivity.slice(0, 10).map((activity) => (
+                  <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                    {data.recentActivity.slice(0, isMobile ? 5 : 10).map((activity) => (
                       <ActivityItem key={activity.id} activity={activity} />
                     ))}
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {data?.recentMatches && data.recentMatches.length > 0 && (
-                <motion.div
-                  variants={itemVariants}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-                >
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
                   <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
                     <Calendar className="h-4 w-4 text-indigo-400" />
                     Recent Matches
@@ -950,12 +887,12 @@ export default function AdminAnalyticsPage() {
                       {data.recentMatches.length}
                     </span>
                   </h3>
-                  <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 will-change-transform">
-                    {data.recentMatches.map((match) => (
+                  <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                    {data.recentMatches.slice(0, isMobile ? 5 : 10).map((match) => (
                       <MatchItem key={match.id} match={match} />
                     ))}
                   </div>
-                </motion.div>
+                </div>
               )}
             </div>
           </>
@@ -965,12 +902,9 @@ export default function AdminAnalyticsPage() {
         {/* TAB: REVENUE */}
         {/* ============================================================ */}
         {activeTab === "revenue" && (
-          <motion.div variants={containerVariants} className="space-y-5">
+          <div className="space-y-5">
             {/* Revenue Chart */}
-            <motion.div
-              variants={itemVariants}
-              className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-            >
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
                   <DollarSign className="h-4 w-4 text-emerald-400" />
@@ -996,14 +930,11 @@ export default function AdminAnalyticsPage() {
                   Forecast
                 </span>
               </div>
-            </motion.div>
+            </div>
 
             {/* Revenue Stats */}
             {data?.revenueData && data.revenueData.length > 0 && (
-              <motion.div
-                variants={containerVariants}
-                className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-              >
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
                   {
                     label: "Total Revenue",
@@ -1035,30 +966,25 @@ export default function AdminAnalyticsPage() {
                 ].map((item, index) => {
                   const Icon = item.icon;
                   return (
-                    <motion.div
+                    <div
                       key={item.label}
-                      variants={itemVariants}
-                      whileHover={{ y: -2 }}
-                      className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-all hover:border-indigo-500/30"
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-all duration-150 hover:border-indigo-500/30"
                     >
                       <p className="text-xs text-gray-400">{item.label}</p>
                       <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
-                    </motion.div>
+                    </div>
                   );
                 })}
-              </motion.div>
+              </div>
             )}
-          </motion.div>
+          </div>
         )}
 
         {/* ============================================================ */}
         {/* TAB: PERFORMANCE */}
         {/* ============================================================ */}
         {activeTab === "performance" && (
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-          >
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <Trophy className="h-4 w-4 text-yellow-400" />
               Season Performance
@@ -1081,7 +1007,7 @@ export default function AdminAnalyticsPage() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {data.seasonPerformance.map((season) => (
-                      <tr key={season.seasonId} className="transition-colors hover:bg-white/5">
+                      <tr key={season.seasonId} className="transition-colors duration-150 hover:bg-white/5">
                         <td className="py-2.5 pr-2 font-medium text-white">
                           {season.seasonName}
                           {season.isActive && (
@@ -1130,18 +1056,15 @@ export default function AdminAnalyticsPage() {
                 <p className="mt-2 text-sm">No season data available</p>
               </div>
             )}
-          </motion.div>
+          </div>
         )}
 
         {/* ============================================================ */}
         {/* TAB: INSIGHTS */}
         {/* ============================================================ */}
         {activeTab === "insights" && (
-          <motion.div variants={containerVariants} className="space-y-4">
-            <motion.div
-              variants={itemVariants}
-              className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-            >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Brain className="h-5 w-5 text-amber-400" />
                 <h3 className="text-sm font-semibold text-white">
@@ -1159,7 +1082,7 @@ export default function AdminAnalyticsPage() {
 
               {data?.insights && data.insights.length > 0 ? (
                 <div className="space-y-3">
-                  {data.insights.map((insight) => (
+                  {data.insights.slice(0, isMobile ? 3 : 5).map((insight) => (
                     <InsightCard key={insight.id} insight={insight} />
                   ))}
                 </div>
@@ -1170,13 +1093,10 @@ export default function AdminAnalyticsPage() {
                   <p className="text-xs text-gray-600">Insights will appear as data grows</p>
                 </div>
               )}
-            </motion.div>
+            </div>
 
             {/* Quick Stats Summary */}
-            <motion.div
-              variants={containerVariants}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-            >
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 {
                   label: "Platform Health",
@@ -1209,21 +1129,19 @@ export default function AdminAnalyticsPage() {
               ].map((item, index) => {
                 const Icon = index === 0 ? Shield : index === 1 ? Users : index === 2 ? DollarSign : Trophy;
                 return (
-                  <motion.div
+                  <div
                     key={item.label}
-                    variants={itemVariants}
-                    whileHover={{ y: -2 }}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-all hover:border-indigo-500/30"
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-all duration-150 hover:border-indigo-500/30"
                   >
                     <p className="text-xs text-gray-400">{item.label}</p>
                     <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
-                  </motion.div>
+                  </div>
                 );
               })}
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </motion.div>
+      </div>
     </>
   );
 }

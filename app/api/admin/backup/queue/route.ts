@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+// ✅ Lazy load the backup worker to avoid tracing issues
+async function getBackupWorker() {
+  // ✅ Dynamic import with webpack ignore to prevent tracing
+  const { backupWorker } = await import(/* webpackIgnore: true */ '@/lib/services/backup.worker');
+  return backupWorker;
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -31,8 +38,8 @@ export async function POST(request: Request) {
 
     // ✅ Run backup synchronously (not in background)
     try {
-      const { backupWorker } = await import('@/lib/services/backup.worker')
-      await backupWorker.performBackup(backup.id, session.user.id)
+      const worker = await getBackupWorker()
+      await worker.performBackup(backup.id, session.user.id)
       
       return NextResponse.json({
         success: true,
@@ -44,7 +51,13 @@ export async function POST(request: Request) {
       console.error('Backup failed:', error)
       await prisma.backup.update({
         where: { id: backup.id },
-        data: { status: "FAILED" }
+        data: { 
+          status: "FAILED",
+          metadata: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            failedAt: new Date().toISOString()
+          }
+        }
       })
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "Backup failed" },

@@ -242,14 +242,16 @@ model Result {
   user              User             @relation(fields: [submittedBy], references: [id])
   tournamentMatch   TournamentMatch? @relation(fields: [tournamentMatchId], references: [id])
 
-  // ✅ SUPER FAST INDEXES
-  @@index([fixtureId])
+  
+  // ✅ ADD THESE INDEXES
   @@index([approved])
   @@index([createdAt])
+  @@index([source])
   @@index([submittedBy])
   @@index([approved, createdAt])
-  @@index([source])
   @@index([createdAt, approved])
+  @@index([source, approved])
+  @@index([submittedBy, approved])
 }
 
 model LeagueEntry {
@@ -708,7 +710,7 @@ model LeagueSettings {
 model PlayerSeasonEntry {
   id             String   @id @default(cuid())
   userId         String
-  seasonId       String
+  seasonId        String  
   hasPaid        Boolean  @default(false)
   paidAt         DateTime?
   paymentReceipt String?
@@ -722,8 +724,8 @@ model PlayerSeasonEntry {
   season         Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   seasonEntry    SeasonEntry? @relation(fields: [seasonEntryId], references: [id], onDelete: SetNull)
   
-  // ✅ SUPER FAST INDEXES
-  @@unique([userId, seasonId])
+   // ✅ FIX: Make userId + seasonId unique together
+  @@unique([userId, seasonId])  // ← Add this
   @@index([userId])
   @@index([seasonId])
   @@index([hasPaid])

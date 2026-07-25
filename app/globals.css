@@ -58,6 +58,7 @@ body {
   margin: 0;
   padding: 0;
   position: relative;
+  overscroll-behavior: none;
 }
 
 /* ✅ Font rendering optimization */
@@ -77,6 +78,61 @@ section {
 .dark body,
 .dark html {
   background-color: #0f172a !important;
+}
+
+/* ============================================ */
+/* ✅ SIDEBAR & LAYOUT - FIXED                 */
+/* ============================================ */
+
+.admin-sidebar {
+  width: 100% !important;
+  max-width: 280px !important;
+}
+
+/* ============================================ */
+/* ✅ TOUCH-FRIENDLY TAP TARGETS                */
+/* ============================================ */
+
+button,
+a,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+button[aria-label*="Hide password"],
+button[aria-label*="Show password"],
+button[aria-label*="password"] {
+  min-width: 44px;
+  width: auto !important;
+  flex-shrink: 0 !important;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  min-height: auto;
+  min-width: auto;
+  accent-color: #4f46e5;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="number"],
+select,
+textarea {
+  min-height: 44px;
+  touch-action: manipulation;
+  width: 100%;
+  min-width: 0;
+  font-size: 16px !important; /* Prevents iOS zoom */
 }
 
 /* ============================================ */
@@ -151,66 +207,21 @@ section {
 }
 
 /* ============================================ */
-/* ✅ TOUCH-FRIENDLY TAP TARGETS                */
-/* ============================================ */
-
-button,
-a,
-[role="button"] {
-  min-height: 44px;
-  min-width: 44px;
-  touch-action: manipulation;
-  cursor: pointer;
-}
-
-button[aria-label*="Hide password"],
-button[aria-label*="Show password"],
-button[aria-label*="password"] {
-  min-width: 44px;
-  width: auto !important;
-  flex-shrink: 0 !important;
-}
-
-input[type="checkbox"],
-input[type="radio"] {
-  width: 18px;
-  height: 18px;
-  min-height: auto;
-  min-width: auto;
-  accent-color: #4f46e5;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-input[type="text"],
-input[type="email"],
-input[type="password"],
-input[type="tel"],
-input[type="number"],
-select,
-textarea {
-  min-height: 44px;
-  touch-action: manipulation;
-  width: 100%;
-  min-width: 0;
-}
-
-/* ============================================ */
 /* ✅ MOBILE RESPONSIVE ADDITIONS               */
 /* ============================================ */
 
-@media (max-width: 768px) {
-  .p-6 { padding: 1rem; }
-  .overflow-x-auto {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  h1 { font-size: 1.5rem; }
-  h2 { font-size: 1.25rem; }
-  .flex-row { flex-direction: column; }
-  button { width: 100%; margin-bottom: 0.5rem; }
-  .grid { gap: 0.75rem; }
+/* ✅ Container */
+.container {
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  margin-left: auto;
+  margin-right: auto;
 }
+@media (min-width: 640px) { .container { max-width: 640px; } }
+@media (min-width: 768px) { .container { max-width: 768px; } }
+@media (min-width: 1024px) { .container { max-width: 1024px; } }
+@media (min-width: 1280px) { .container { max-width: 1280px; } }
 
 /* ============================================ */
 /* ✅ CUSTOM SCROLLBAR - Optimized              */
@@ -296,26 +307,33 @@ textarea {
 [data-sidebar-style="compact"] .sidebar-padding { padding: 0.5rem !important; }
 
 /* ============================================ */
-/* ✅ RESPONSIVE CONTAINER                      */
+/* ✅ MOBILE PERFORMANCE - CRITICAL FIXES       */
 /* ============================================ */
 
-.container {
-  width: 100%;
-  padding-left: 1rem;
-  padding-right: 1rem;
-  margin-left: auto;
-  margin-right: auto;
-}
-@media (min-width: 640px) { .container { max-width: 640px; } }
-@media (min-width: 768px) { .container { max-width: 768px; } }
-@media (min-width: 1024px) { .container { max-width: 1024px; } }
-@media (min-width: 1280px) { .container { max-width: 1280px; } }
-
-/* ============================================ */
-/* ✅ MOBILE GRID OVERRIDES                     */
-/* ============================================ */
-
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  /* ✅ Typography - Mobile first */
+  h1 { font-size: 1.75rem !important; }
+  h2 { font-size: 1.5rem !important; }
+  h3 { font-size: 1.25rem !important; }
+  h4 { font-size: 1.1rem !important; }
+  .text-xl { font-size: 1.1rem !important; }
+  .text-2xl { font-size: 1.5rem !important; }
+  .text-3xl { font-size: 1.75rem !important; }
+  .text-4xl { font-size: 2rem !important; }
+  .text-5xl { font-size: 2.5rem !important; }
+  
+  /* ✅ Padding - Mobile optimized */
+  .p-4 { padding: 0.75rem !important; }
+  .p-5 { padding: 1rem !important; }
+  .p-6 { padding: 1.25rem !important; }
+  .px-4 { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .py-4 { padding-top: 0.75rem !important; padding-bottom: 0.75rem !important; }
+  .py-6 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+  .pt-32 { padding-top: 6rem !important; }
+  .pb-20 { padding-bottom: 4rem !important; }
+  
+  /* ✅ Grid - Mobile optimized */
   .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
   .grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
   .grid-cols-4 { grid-template-columns: repeat(2, 1fr); }
@@ -323,17 +341,20 @@ textarea {
   .gap-4 { gap: 0.75rem; }
   .gap-6 { gap: 1rem; }
   .gap-8 { gap: 1.5rem; }
-}
-
-/* ============================================ */
-/* ✅ MOBILE TABLES                             */
-/* ============================================ */
-
-.overflow-x-auto {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-@media (max-width: 640px) {
+  
+  /* ✅ Modals - Mobile optimized */
+  .fixed .max-w-md {
+    max-width: 95%;
+    margin: 1rem;
+  }
+  
+  /* ✅ Sidebar - Mobile optimized */
+  .admin-sidebar {
+    width: 100% !important;
+    max-width: 280px !important;
+  }
+  
+  /* ✅ Tables - Mobile optimized */
   table { font-size: 0.75rem; }
   table td,
   table th {
@@ -344,69 +365,20 @@ textarea {
   table th:first-child { padding-left: 0.5rem; }
   table td:last-child,
   table th:last-child { padding-right: 0.5rem; }
-}
-
-/* ============================================ */
-/* ✅ MOBILE TYPOGRAPHY                         */
-/* ============================================ */
-
-@media (max-width: 640px) {
-  h1 { font-size: 1.75rem !important; }
-  h2 { font-size: 1.5rem !important; }
-  h3 { font-size: 1.25rem !important; }
-  h4 { font-size: 1.1rem !important; }
-  .text-xl { font-size: 1.1rem !important; }
-  .text-2xl { font-size: 1.5rem !important; }
-  .text-3xl { font-size: 1.75rem !important; }
-  .text-4xl { font-size: 2rem !important; }
-  .text-5xl { font-size: 2.5rem !important; }
-}
-
-/* ============================================ */
-/* ✅ MOBILE CARDS & PROFILE                    */
-/* ============================================ */
-
-@media (max-width: 640px) {
-  .p-4 { padding: 0.75rem !important; }
-  .p-5 { padding: 1rem !important; }
-  .p-6 { padding: 1.25rem !important; }
-  .px-4 { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
-  .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
-  .py-4 { padding-top: 0.75rem !important; padding-bottom: 0.75rem !important; }
-  .py-6 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+  
+  /* ✅ Images - Mobile optimized */
   .w-28 { width: 5rem !important; height: 5rem !important; }
   .w-16 { width: 3.5rem !important; height: 3.5rem !important; }
   .w-24 { width: 4.5rem !important; height: 4.5rem !important; }
-  .pt-32 { padding-top: 6rem !important; }
-  .pb-20 { padding-bottom: 4rem !important; }
-  .fixed .max-w-md {
-    max-width: 95%;
-    margin: 1rem;
-  }
+  
+  /* ✅ No zoom on inputs (prevents iOS zoom) */
   input:not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {
     font-size: 16px !important;
   }
-  .admin-sidebar {
-    width: 100% !important;
-    max-width: 280px !important;
-  }
-}
-
-/* ============================================ */
-/* ✅ MOBILE PERFORMANCE OPTIMIZATIONS          */
-/* ============================================ */
-
-@media (max-width: 768px) {
-  /* ✅ Reduce motion on mobile for battery life */
-  .animate-spin,
-  .animate-pulse,
-  .animate-bounce {
-    animation-duration: 0.8s !important;
-    animation-play-state: running !important;
-  }
   
+  /* ✅ Reduce heavy effects for performance */
   .backdrop-blur-xl,
   .backdrop-blur-lg,
   .backdrop-blur-md {
@@ -419,21 +391,34 @@ textarea {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
   }
   
+  /* ✅ GPU acceleration for scroll containers */
   .overflow-y-auto,
   .overflow-x-auto {
-    -webkit-overflow-scrolling: touch;
     transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
   }
   
+  /* ✅ Disable hover effects on touch devices */
   .hover\:opacity-100,
   .group-hover\:opacity-100 {
     opacity: 1 !important;
   }
-  
   .hover\:scale-105,
   .group-hover\:scale-110,
   .hover\:-translate-y-1 {
     transform: none !important;
+  }
+  
+  /* ✅ Reduce animation intensity */
+  .animate-pulse-slow,
+  .animate-pulse-slower,
+  .animate-pulse-slowest {
+    animation: none !important;
+  }
+  
+  /* ✅ Touch-friendly */
+  * {
+    touch-action: manipulation;
   }
 }
 
@@ -554,6 +539,23 @@ textarea {
   animation: shimmer 1.5s infinite;
 }
 
+/* ✅ Skeleton shimmer for homepage */
+@keyframes shimmer-skeleton {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.animate-shimmer {
+  animation: shimmer-skeleton 2s ease-in-out infinite;
+}
+
+/* Mobile: Disable shimmer (no animations) */
+@media (max-width: 768px) {
+  .animate-shimmer {
+    animation: none;
+    background: rgba(255, 255, 255, 0.03);
+  }
+}
+
 @keyframes pulse-slow {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.8; }
@@ -628,6 +630,24 @@ textarea {
 }
 
 /* ============================================ */
+/* ✅ TOUCH FEEDBACK FOR BUTTONS               */
+/* ============================================ */
+
+@media (hover: none) {
+  button:active,
+  a:active,
+  [role="button"]:active {
+    transform: scale(0.97);
+    transition: transform 0.05s;
+  }
+}
+
+/* ✅ Prevent 300ms tap delay */
+a, button, input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* ============================================ */
 /* ✅ PRINT OPTIMIZATIONS                       */
 /* ============================================ */
 
@@ -643,75 +663,45 @@ textarea {
 }
 
 /* ============================================ */
-/* ✅ MOBILE PERFORMANCE - CRITICAL FIXES       */
+/* ✅ TABLE OVERFLOW - Mobile                   */
 /* ============================================ */
 
-/* ✅ Reduce heavy effects on mobile */
-@media (max-width: 768px) {
-  /* ✅ Lower blur for performance */
-  .backdrop-blur-xl,
-  .backdrop-blur-lg,
-  .backdrop-blur-md {
-    backdrop-filter: blur(4px) !important;
-    -webkit-backdrop-filter: blur(4px) !important;
-  }
-  
-  /* ✅ Lighter shadows */
-  .shadow-2xl,
-  .shadow-xl {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
-  }
-  
-  /* ✅ Reduce animation intensity */
-  .animate-pulse-slow,
-  .animate-pulse-slower,
-  .animate-pulse-slowest {
-    animation: none !important;
-  }
-  
-  /* ✅ Touch-friendly */
-  * {
-    touch-action: manipulation;
-  }
-  
-  /* ✅ No zoom on inputs (prevents iOS zoom) */
-  input, select, textarea {
-    font-size: 16px !important;
-  }
-  
-  /* ✅ GPU acceleration for scroll containers */
-  .overflow-y-auto,
-  .overflow-x-auto {
-    transform: translateZ(0);
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  /* ✅ Disable hover effects on touch devices */
-  .hover\:scale-105,
-  .group-hover\:scale-110,
-  .hover\:-translate-y-1 {
-    transform: none !important;
-  }
+.overflow-x-auto {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* ✅ Touch feedback for buttons */
-@media (hover: none) {
-  button:active,
-  a:active,
-  [role="button"]:active {
-    transform: scale(0.97);
-    transition: transform 0.05s;
-  }
+/* ============================================ */
+/* ✅ FORM ELEMENTS - Consistent                */
+/* ============================================ */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="number"],
+select,
+textarea {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* ✅ Prevent 300ms tap delay */
-a, button, input, select, textarea {
-  touch-action: manipulation;
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
 }
 
-/* ✅ Disable pull-to-refresh on mobile */
-body {
-  overscroll-behavior: none;
+/* ============================================ */
+/* ✅ DARK MODE FOCUS                          */
+/* ============================================ */
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
 }
 
 /* ============================================ */
@@ -727,9 +717,3 @@ body {
 @layer base {
   /* This ensures CSS changes are applied on refresh */
 }
-
-/* ============================================ */
-/* ✅ MOBILE PERFORMANCE - CRITICAL FIXES       */
-/* ============================================ */
-
-/* ✅ Rest of your existing CSS below... */

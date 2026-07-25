@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback,memo } from "react";
+import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
 import {
   Trophy,
@@ -27,6 +27,7 @@ import {
   Flame,
   Medal,
   ArrowUpRight,
+  Loader2,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -43,14 +44,6 @@ import {
 } from "chart.js";
 import { Line, Doughnut } from "react-chartjs-2";
 import toast from "react-hot-toast";
-import {
-  motion,
-  AnimatePresence,
-  useMotionValue,
-  useTransform,
-  animate,
-  type Variants,
-} from "framer-motion";
 
 // Register ChartJS components
 ChartJS.register(
@@ -164,80 +157,23 @@ interface H2HStats {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
-  },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
-
-/* -------------------------------------------------------------------------- */
-/*                         Animated number counter                            */
-/* -------------------------------------------------------------------------- */
-
-function AnimatedCounter({
-  value,
-  decimals = 0,
-  suffix = "",
-  prefix = "",
-}: {
-  value: number;
-  decimals?: number;
-  suffix?: string;
-  prefix?: string;
-}) {
-  const count = useMotionValue(0);
-  const rounded = useTransform(count, (latest) =>
-    decimals > 0 ? latest.toFixed(decimals) : Math.round(latest).toString()
-  );
-  const [display, setDisplay] = useState(decimals > 0 ? "0.00" : "0");
-
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
   useEffect(() => {
-    const controls = animate(count, value || 0, {
-      duration: 1,
-      ease: "easeOut",
-    });
-    const unsub = rounded.on("change", (v) => setDisplay(v));
-    return () => {
-      controls.stop();
-      unsub();
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
     };
-  }, [value]);
-
-  return (
-    <span>
-      {prefix}
-      {display}
-      {suffix}
-    </span>
-  );
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -278,44 +214,70 @@ function TrendBadge({ winRate }: { winRate: number }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
+      <div className="absolute -left-32 top-0 h-72 w-72 rounded-full bg-indigo-600/20 blur-3xl" />
+      <div className="absolute -right-32 top-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-pink-600/10 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Hero Stat ===
 const HeroStat = memo(({ stat }: { stat: any }) => {
   const Icon = stat.icon;
   return (
-    <motion.div
-      variants={statCardVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
-      className="will-change-transform"
-    >
-      <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl">
-        <div
-          className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${stat.gradient} opacity-20 blur-2xl transition-opacity duration-500 group-hover:opacity-40`}
-        />
-        <div className="relative flex items-start justify-between">
-          <span
-            className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} shadow-lg ${stat.glow}`}
-          >
-            <Icon className="h-5 w-5 text-white" />
-          </span>
-          <Sparkles className="h-4 w-4 text-white/20" />
-        </div>
-        <p className="relative mt-4 text-3xl font-extrabold text-white">
-          <AnimatedCounter value={stat.value} suffix={stat.suffix} />
-        </p>
-        <p className="relative mt-1 text-xs font-medium uppercase tracking-wide text-gray-400">
-          {stat.name}
-        </p>
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/40">
+      <div
+        className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${stat.gradient} opacity-20 blur-2xl transition-opacity duration-300 group-hover:opacity-40`}
+      />
+      <div className="relative flex items-start justify-between">
+        <span
+          className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} shadow-lg ${stat.glow}`}
+        >
+          <Icon className="h-5 w-5 text-white" />
+        </span>
+        <Sparkles className="h-4 w-4 text-white/20" />
       </div>
-    </motion.div>
+      <p className="relative mt-4 text-3xl font-extrabold text-white">
+        {stat.value}{stat.suffix || ""}
+      </p>
+      <p className="relative mt-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+        {stat.name}
+      </p>
+    </div>
   );
 });
 
 HeroStat.displayName = "HeroStat";
 
+// === STATIC Perf Card ===
 const PerfCard = memo(({
   icon: Icon,
   label,
@@ -331,85 +293,37 @@ const PerfCard = memo(({
   accent: string;
   ring: string;
 }) => (
-  <motion.div
-    variants={statCardVariants}
-    initial="hidden"
-    animate="visible"
-    whileHover="hover"
-    className="will-change-transform"
-  >
-    <div className={`rounded-2xl border border-white/10 bg-white/5 p-4 text-center shadow-xl backdrop-blur-xl ring-1 ${ring}`}>
-      <span className={`mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ${accent}`}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <p className="text-xl font-bold text-white">
-        <AnimatedCounter value={value} suffix={suffix} />
-      </p>
-      <p className="text-xs text-gray-400">{label}</p>
-    </div>
-  </motion.div>
+  <div className={`rounded-2xl border border-white/10 bg-white/5 p-4 text-center shadow-xl backdrop-blur-xl ring-1 ${ring} transition-colors duration-150 hover:border-indigo-500/30`}>
+    <span className={`mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 ${accent}`}>
+      <Icon className="h-5 w-5" />
+    </span>
+    <p className="text-xl font-bold text-white">{value}{suffix}</p>
+    <p className="text-xs text-gray-400">{label}</p>
+  </div>
 ));
 
 PerfCard.displayName = "PerfCard";
 
+// === STATIC Award Chip ===
 const AwardChip = memo(({ award, index }: { award: any; index: number }) => (
-  <motion.div
-    initial={{ opacity: 0, scale: 0.8 }}
-    animate={{ opacity: 1, scale: 1 }}
-    transition={{ delay: 0.05 * index, type: "spring", stiffness: 300 }}
-    whileHover={{ y: -2 }}
-    className="flex items-center gap-2 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 shadow-md shadow-yellow-500/10"
-  >
+  <div className="flex items-center gap-2 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 shadow-md shadow-yellow-500/10 transition-colors duration-150 hover:border-yellow-500/50">
     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-amber-500">
       <Star className="h-3.5 w-3.5 text-white" />
     </span>
     <span className="text-sm font-medium text-white">{award.name}</span>
     <span className="text-xs text-gray-400">• {award.season.name}</span>
-  </motion.div>
+  </div>
 ));
 
 AwardChip.displayName = "AwardChip";
 
 /* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-72 w-72 rounded-full bg-indigo-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-32 top-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-pink-600/10 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.15]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
-    />
-  </div>
-));
-
-DecorBackground.displayName = "DecorBackground";
-
-/* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function StatisticsPage() {
   const { data: session } = useSession();
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [selectedSeason, setSelectedSeason] = useState<string>("all");
   const [stats, setStats] = useState<PlayerStats | null>(null);
@@ -477,7 +391,7 @@ export default function StatisticsPage() {
         tension: 0.4,
         pointBackgroundColor: "#818cf8",
         pointBorderColor: "#fff",
-        pointRadius: 3,
+        pointRadius: isMobile ? 2 : 3,
       },
       {
         label: "Goals Conceded",
@@ -488,7 +402,7 @@ export default function StatisticsPage() {
         tension: 0.4,
         pointBackgroundColor: "#f87171",
         pointBorderColor: "#fff",
-        pointRadius: 3,
+        pointRadius: isMobile ? 2 : 3,
       },
     ],
   };
@@ -562,7 +476,7 @@ export default function StatisticsPage() {
     return (
       <>
         <DecorBackground />
-        <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64 px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20" />
@@ -581,19 +495,11 @@ export default function StatisticsPage() {
   }
 
   return (
-    <div className="relative">
+    <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="flex flex-wrap items-center justify-between gap-4"
-        >
+      <div className="space-y-5 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/30">
               <BarChart3 className="h-6 w-6 text-white" />
@@ -604,14 +510,14 @@ export default function StatisticsPage() {
             </div>
           </div>
 
-          {/* Season Selector */}
+          {/* Season Selector - NO animations */}
           <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2 backdrop-blur-xl">
             <Calendar className="ml-1 h-4 w-4 text-gray-400" />
             <div className="relative">
               <select
                 value={selectedSeason}
                 onChange={(e) => setSelectedSeason(e.target.value)}
-                className="min-h-[44px] appearance-none rounded-lg border border-white/10 bg-gray-900/60 px-4 py-2 pr-10 text-sm text-white transition focus:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                className="min-h-[44px] appearance-none rounded-lg border border-white/10 bg-gray-900/60 px-4 py-2 pr-10 text-sm text-white transition-colors duration-150 focus:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               >
                 <option value="all">All Seasons</option>
                 {seasons.map((s) => (
@@ -621,69 +527,64 @@ export default function StatisticsPage() {
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Hero Stats */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* Hero Stats - NO animations */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {heroStats.map((stat) => (
             <HeroStat key={stat.name} stat={stat} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Performance Grid */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {/* Performance Grid - NO animations */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {perfStats.map((stat) => (
             <PerfCard key={stat.label} {...stat} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Goals Stats */}
-        <motion.div variants={containerVariants} className="grid gap-3 lg:grid-cols-3">
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+        {/* Goals Stats - NO animations */}
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/30">
             <div className="flex items-center justify-between">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 ring-1 ring-blue-500/30">
                 <Target className="h-5 w-5 text-blue-400" />
               </span>
-              <p className="text-3xl font-extrabold text-blue-400">
-                <AnimatedCounter value={goalsFor} />
-              </p>
+              <p className="text-3xl font-extrabold text-blue-400">{goalsFor}</p>
             </div>
             <p className="mt-3 text-sm text-gray-400">Goals For</p>
             <p className="text-xs text-gray-500">{goalsPerMatch.toFixed(2)} per match</p>
-          </motion.div>
+          </div>
 
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/30">
             <div className="flex items-center justify-between">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15 ring-1 ring-red-500/30">
                 <Shield className="h-5 w-5 text-red-400" />
               </span>
-              <p className="text-3xl font-extrabold text-red-400">
-                <AnimatedCounter value={goalsAgainst} />
-              </p>
+              <p className="text-3xl font-extrabold text-red-400">{goalsAgainst}</p>
             </div>
             <p className="mt-3 text-sm text-gray-400">Goals Against</p>
             <p className="text-xs text-gray-500">{played > 0 ? (goalsAgainst / played).toFixed(2) : "0.00"} per match</p>
-          </motion.div>
+          </div>
 
-          <motion.div
-            variants={itemVariants}
-            className={`rounded-2xl border bg-white/5 p-5 backdrop-blur-xl ${goalDifference >= 0 ? "border-emerald-500/20" : "border-red-500/20"}`}
+          <div
+            className={`rounded-2xl border bg-white/5 p-5 backdrop-blur-xl transition-colors duration-150 hover:border-indigo-500/30 ${goalDifference >= 0 ? "border-emerald-500/20" : "border-red-500/20"}`}
           >
             <div className="flex items-center justify-between">
               <span className={`flex h-10 w-10 items-center justify-center rounded-xl ring-1 ${goalDifference >= 0 ? "bg-emerald-500/15 ring-emerald-500/30" : "bg-red-500/15 ring-red-500/30"}`}>
                 {goalDifference >= 0 ? <TrendingUp className="h-5 w-5 text-emerald-400" /> : <TrendingDown className="h-5 w-5 text-red-400" />}
               </span>
               <p className={`text-3xl font-extrabold ${goalDifference >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {goalDifference >= 0 ? "+" : ""}<AnimatedCounter value={Math.abs(goalDifference)} />
+                {goalDifference >= 0 ? "+" : ""}{Math.abs(goalDifference)}
               </p>
             </div>
             <p className="mt-3 text-sm text-gray-400">Goal Difference</p>
             <p className="text-xs text-gray-500">{goalsPerMatch.toFixed(2)} goals/match</p>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
-        {/* Attack vs Defense Bar */}
-        <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl">
+        {/* Attack vs Defense Bar - NO animations */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
               <BarChart3 className="h-4 w-4 text-indigo-400" />
@@ -692,22 +593,18 @@ export default function StatisticsPage() {
             <span className="text-xs text-gray-500">{goalsFor} GF · {goalsAgainst} GA</span>
           </div>
           <div className="flex h-6 w-full overflow-hidden rounded-full bg-gray-900/60 ring-1 ring-white/10">
-            <motion.div
-              className="flex items-center justify-start bg-gradient-to-r from-blue-500 to-indigo-500 pl-2 text-[10px] font-bold text-white"
-              initial={{ width: 0 }}
-              animate={{ width: `${gfPercent}%` }}
-              transition={{ duration: 0.9, ease: "easeOut" }}
+            <div
+              className="flex items-center justify-start bg-gradient-to-r from-blue-500 to-indigo-500 pl-2 text-[10px] font-bold text-white transition-all duration-300"
+              style={{ width: `${gfPercent}%` }}
             >
               {gfPercent > 12 && `${Math.round(gfPercent)}%`}
-            </motion.div>
-            <motion.div
-              className="flex items-center justify-end bg-gradient-to-r from-red-500 to-rose-500 pr-2 text-[10px] font-bold text-white"
-              initial={{ width: 0 }}
-              animate={{ width: `${gaPercent}%` }}
-              transition={{ duration: 0.9, ease: "easeOut" }}
+            </div>
+            <div
+              className="flex items-center justify-end bg-gradient-to-r from-red-500 to-rose-500 pr-2 text-[10px] font-bold text-white transition-all duration-300"
+              style={{ width: `${gaPercent}%` }}
             >
               {gaPercent > 12 && `${Math.round(gaPercent)}%`}
-            </motion.div>
+            </div>
           </div>
           <div className="mt-2 flex justify-between text-xs">
             <span className="flex items-center gap-1 text-blue-400">
@@ -717,10 +614,10 @@ export default function StatisticsPage() {
               Goals Against <span className="h-2 w-2 rounded-full bg-red-500" />
             </span>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Form Guide */}
-        <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl">
+        {/* Form Guide - NO animations */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -729,11 +626,8 @@ export default function StatisticsPage() {
               </h3>
               <div className="flex gap-1.5">
                 {(matchHistory?.form || "").split("").map((letter, i) => (
-                  <motion.span
+                  <span
                     key={i}
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.1 + i * 0.06, type: "spring", stiffness: 400, damping: 18 }}
                     className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold ring-1 ${
                       letter === "W" ? "bg-emerald-500/20 text-emerald-400 ring-emerald-500/30 shadow-md shadow-emerald-500/20" :
                       letter === "D" ? "bg-yellow-500/20 text-yellow-400 ring-yellow-500/30" :
@@ -742,7 +636,7 @@ export default function StatisticsPage() {
                     }`}
                   >
                     {letter}
-                  </motion.span>
+                  </span>
                 ))}
                 {!matchHistory?.form && <span className="text-xs text-gray-500">No recent matches</span>}
               </div>
@@ -763,19 +657,17 @@ export default function StatisticsPage() {
               <span className="font-semibold text-white">{winRate}%</span>
             </div>
             <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-900/60 ring-1 ring-white/10">
-              <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"
-                initial={{ width: 0 }}
-                animate={{ width: `${Math.min(winRate, 100)}%` }}
-                transition={{ duration: 0.9, ease: "easeOut" }}
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300"
+                style={{ width: `${Math.min(winRate, 100)}%` }}
               />
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Charts */}
-        <motion.div variants={containerVariants} className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+        {/* Charts - NO animations */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <LineChartIcon className="h-4 w-4 text-indigo-400" />
               Performance Trend
@@ -791,9 +683,9 @@ export default function StatisticsPage() {
                 },
               }} />
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <PieChartIcon className="h-4 w-4 text-indigo-400" />
               Result Distribution
@@ -808,12 +700,12 @@ export default function StatisticsPage() {
                 }} />
               </div>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
-        {/* Awards */}
+        {/* Awards - NO animations */}
         {stats?.awards && stats.awards.length > 0 && (
-          <motion.div variants={itemVariants} className="rounded-2xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/[0.07] to-amber-500/[0.04] p-6 shadow-2xl backdrop-blur-xl">
+          <div className="rounded-2xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/[0.07] to-amber-500/[0.04] p-6 shadow-2xl backdrop-blur-xl">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <Crown className="h-4 w-4 text-yellow-400" />
               Awards & Achievements
@@ -823,12 +715,12 @@ export default function StatisticsPage() {
                 <AwardChip key={award.id} award={award} index={i} />
               ))}
             </div>
-          </motion.div>
+          </div>
         )}
 
-        {/* Head-to-Head */}
+        {/* Head-to-Head - NO animations */}
         {h2hStats.length > 0 && (
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <Users className="h-4 w-4 text-indigo-400" />
               Head-to-Head Records
@@ -850,7 +742,7 @@ export default function StatisticsPage() {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {h2hStats.slice(0, 10).map((stat) => (
-                    <tr key={stat.opponentId} className="text-gray-300 transition-colors hover:bg-white/5">
+                    <tr key={stat.opponentId} className="text-gray-300 transition-colors duration-150 hover:bg-white/5">
                       <td className="py-3 font-medium text-white">{stat.opponentName}</td>
                       <td className="py-3 text-center">{stat.played}</td>
                       <td className="py-3 text-center text-emerald-400">{stat.wins}</td>
@@ -867,12 +759,12 @@ export default function StatisticsPage() {
                 </tbody>
               </table>
             </div>
-          </motion.div>
+          </div>
         )}
 
-        {/* Season History */}
+        {/* Season History - NO animations */}
         {stats?.seasons && stats.seasons.length > 0 && (
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <Calendar className="h-4 w-4 text-indigo-400" />
               Season History
@@ -893,7 +785,7 @@ export default function StatisticsPage() {
                   {stats.seasons.map((s) => {
                     const isCurrent = currentSeasonStats?.season?.id === s.id || selectedSeason === s.id;
                     return (
-                      <tr key={s.id} className={`transition-colors hover:bg-white/5 ${isCurrent ? "bg-indigo-500/[0.07]" : ""}`}>
+                      <tr key={s.id} className={`transition-colors duration-150 hover:bg-white/5 ${isCurrent ? "bg-indigo-500/[0.07]" : ""}`}>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
                             {isCurrent && <span className="h-2 w-2 rounded-full bg-indigo-400 shadow shadow-indigo-400/50" />}
@@ -912,12 +804,12 @@ export default function StatisticsPage() {
                 </tbody>
               </table>
             </div>
-          </motion.div>
+          </div>
         )}
 
-        {/* Career Summary */}
+        {/* Career Summary - NO animations */}
         {stats?.totalSeasons && stats.totalSeasons > 1 && selectedSeason === "all" && (
-          <motion.div variants={itemVariants} className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600/10 to-purple-600/10 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600/10 to-purple-600/10 p-6 shadow-2xl backdrop-blur-xl">
             <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
             <h3 className="relative mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <Trophy className="h-4 w-4 text-yellow-400" />
@@ -931,32 +823,28 @@ export default function StatisticsPage() {
                 { label: "Seasons Played", value: stats.totalSeasons },
               ].map((item) => (
                 <div key={item.label}>
-                  <p className="text-3xl font-extrabold text-white"><AnimatedCounter value={item.value} /></p>
+                  <p className="text-3xl font-extrabold text-white">{item.value}</p>
                   <p className="mt-1 text-xs text-gray-400">{item.label}</p>
                 </div>
               ))}
             </div>
-          </motion.div>
+          </div>
         )}
 
-        {/* Recent Matches */}
+        {/* Recent Matches - NO animations */}
         {matchHistory?.matches && matchHistory.matches.length > 0 && (
-          <motion.div variants={itemVariants} className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-white">
               <Calendar className="h-4 w-4 text-indigo-400" />
               Recent Matches
             </h3>
             <div className="space-y-2">
               {matchHistory.matches.slice(0, 10).map((match, i) => (
-                <motion.div
+                <div
                   key={match.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.03 * i }}
-                  whileHover={{ x: 4 }}
-                  className="flex min-h-[44px] items-center justify-between rounded-xl border border-white/5 bg-gray-900/40 p-3 transition-colors hover:bg-gray-900/70"
+                  className="flex min-h-[44px] flex-wrap items-center justify-between rounded-xl border border-white/5 bg-gray-900/40 p-3 transition-colors duration-150 hover:bg-gray-900/70"
                 >
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <span className={`rounded-lg px-2 py-1 text-xs font-bold ring-1 ${
                       match.result === "WIN" ? "bg-emerald-500/20 text-emerald-400 ring-emerald-500/30" :
                       match.result === "DRAW" ? "bg-yellow-500/20 text-yellow-400 ring-yellow-500/30" :
@@ -974,12 +862,12 @@ export default function StatisticsPage() {
                     <span className="text-xs text-gray-500">{match.isHome ? "🏠 Home" : "✈️ Away"}</span>
                   </div>
                   <span className="text-xs text-gray-500">{new Date(match.scheduledDate).toLocaleDateString()}</span>
-                </motion.div>
+                </div>
               ))}
             </div>
-          </motion.div>
+          </div>
         )}
-      </motion.div>
-    </div>
+      </div>
+    </>
   );
 }

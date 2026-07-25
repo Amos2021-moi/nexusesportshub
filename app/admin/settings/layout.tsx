@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useCallback, memo, useState } from "react";
 import {
   Settings,
   Trophy,
@@ -21,11 +20,42 @@ const tabs = [
   { name: "System", href: "/admin/settings/system", icon: Server },
   { name: "Moderation", href: "/admin/settings/moderation", icon: Shield },
   { name: "Notifications", href: "/admin/settings/notifications", icon: Bell },
-  // ✅ Backup tab
   { name: "Backup", href: "/admin/settings/backup", icon: HardDrive },
 ];
 
-function DecorBackground() {
+/* -------------------------------------------------------------------------- */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
+
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Background - NO ANIMATIONS               */
+/* -------------------------------------------------------------------------- */
+
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
+
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
       <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-[120px]" />
@@ -41,7 +71,49 @@ function DecorBackground() {
       />
     </div>
   );
-}
+});
+
+DecorBackground.displayName = "DecorBackground";
+
+/* -------------------------------------------------------------------------- */
+/*                           Memoized Components                             */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Tab Item ===
+const TabItem = memo(({ 
+  tab, 
+  isActive, 
+  pathname 
+}: { 
+  tab: typeof tabs[0]; 
+  isActive: boolean; 
+  pathname: string;
+}) => {
+  const Icon = tab.icon;
+  const isMobile = useIsMobile();
+  const hoverClass = isMobile ? "" : "hover:bg-white/5 hover:text-white";
+
+  return (
+    <Link
+      key={tab.name}
+      href={tab.href}
+      className={`flex min-h-[44px] flex-shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 sm:px-4 ${
+        isActive
+          ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/30"
+          : `text-gray-400 ${hoverClass}`
+      }`}
+    >
+      <Icon className="h-4 w-4 flex-shrink-0" />
+      {tab.name}
+    </Link>
+  );
+});
+
+TabItem.displayName = "TabItem";
+
+/* -------------------------------------------------------------------------- */
+/*                               Main Component                               */
+/* -------------------------------------------------------------------------- */
 
 export default function AdminSettingsLayout({
   children,
@@ -51,6 +123,7 @@ export default function AdminSettingsLayout({
   const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (status === "loading") return;
@@ -70,7 +143,7 @@ export default function AdminSettingsLayout({
     return (
       <>
         <DecorBackground />
-        <div className="flex h-64 items-center justify-center">
+        <div className="flex h-64 items-center justify-center px-4">
           <div className="text-center">
             <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-[3px] border-indigo-500/30 border-t-indigo-500" />
             <p className="text-sm text-gray-400">Loading...</p>
@@ -87,20 +160,15 @@ export default function AdminSettingsLayout({
   return (
     <>
       <DecorBackground />
-      <div className="space-y-5 sm:space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
           <div className="relative">
             <div className="mb-2 flex items-center gap-2 text-sm text-gray-400">
               <Link
                 href="/admin"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/10 hover:text-white"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors duration-150 hover:bg-white/10 hover:text-white"
               >
                 <Home className="h-4 w-4" />
               </Link>
@@ -113,50 +181,30 @@ export default function AdminSettingsLayout({
               </span>
               Admin Settings
             </h1>
-            <p className="mt-1 text-xs text-gray-300 sm:text-sm">
+            <p className="mt-1 truncate text-xs text-gray-300 sm:text-sm">
               Control platform behavior and league rules
             </p>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut", delay: 0.05 }}
-          className="rounded-2xl border border-white/10 bg-gray-800/40 p-1.5 shadow-2xl backdrop-blur-xl"
-        >
+        {/* Tabs - NO animations */}
+        <div className="rounded-2xl border border-white/10 bg-gray-800/40 p-1.5 shadow-2xl backdrop-blur-xl">
           <div className="flex gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {tabs.map((tab) => {
-              const isActive = pathname === tab.href;
-              const Icon = tab.icon;
-              return (
-                <Link
-                  key={tab.name}
-                  href={tab.href}
-                  className={`flex min-h-[44px] flex-shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-all sm:px-4 ${
-                    isActive
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-900/30"
-                      : "text-gray-400 hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  {tab.name}
-                </Link>
-              );
-            })}
+            {tabs.map((tab) => (
+              <TabItem
+                key={tab.name}
+                tab={tab}
+                isActive={pathname === tab.href}
+                pathname={pathname}
+              />
+            ))}
           </div>
-        </motion.div>
+        </div>
 
-        {/* Content */}
-        <motion.div
-          key={pathname}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-        >
+        {/* Content - NO animations */}
+        <div key={pathname}>
           {children}
-        </motion.div>
+        </div>
       </div>
     </>
   );

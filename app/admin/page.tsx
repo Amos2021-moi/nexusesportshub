@@ -1,9 +1,8 @@
-// app/admin/page.tsx
 "use client";
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
   Trophy,
@@ -77,9 +76,11 @@ import {
   X,
   ExternalLink,
   Command,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { useInView } from "react-intersection-observer";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -222,83 +223,54 @@ interface VerificationItem {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.04, delayChildren: 0.01 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 14, scale: 0.98 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { duration: 0.38, ease: [0.22, 1, 0.36, 1] },
-  },
-};
-
-const cardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.94 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
-  },
-  hover: {
-    y: -5,
-    scale: 1.025,
-    transition: { type: "spring", stiffness: 380, damping: 22 },
-  },
-};
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
-/*                           Background Component                             */
+/*                           STATIC Background                               */
 /* -------------------------------------------------------------------------- */
 
 const DecorBackground = memo(({ theme = "indigo" }: { theme?: string }) => {
-  const isNeon = theme === "neon";
-  const isGold = theme === "gold";
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[#070913]" />
+    );
+  }
 
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#070913]">
       <div className="absolute inset-0 bg-gradient-to-br from-[#070913] via-[#0b0e1d] to-[#12102a]" />
-      
-      {/* Cyber Shimmer Grid */}
       <div
-        className="absolute inset-0 opacity-[0.035]"
+        className="absolute inset-0 opacity-[0.03]"
         style={{
           backgroundImage:
             "linear-gradient(to right, #6366f1 1px, transparent 1px), linear-gradient(to bottom, #6366f1 1px, transparent 1px)",
           backgroundSize: "48px 48px",
         }}
       />
-
-      {/* Radial Orbs */}
-      <motion.div
-        animate={{ scale: [1, 1.15, 1], opacity: [0.22, 0.38, 0.22] }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        className={`absolute -left-48 -top-48 h-[650px] w-[650px] rounded-full blur-[160px] ${
-          isNeon ? "bg-emerald-600/25" : isGold ? "bg-amber-500/25" : "bg-indigo-600/25"
-        }`}
-      />
-      <motion.div
-        animate={{ scale: [1.15, 1, 1.15], opacity: [0.18, 0.34, 0.18] }}
-        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-        className={`absolute -right-48 top-1/4 h-[650px] w-[650px] rounded-full blur-[160px] ${
-          isNeon ? "bg-cyan-600/20" : isGold ? "bg-orange-600/20" : "bg-purple-600/20"
-        }`}
-      />
-      <motion.div
-        animate={{ scale: [1, 1.1, 1], opacity: [0.15, 0.3, 0.15] }}
-        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute bottom-0 left-1/3 h-[550px] w-[550px] rounded-full bg-pink-600/15 blur-[160px]"
-      />
+      <div className={`absolute -left-48 -top-48 h-[500px] w-[500px] rounded-full blur-[140px] ${
+        theme === "neon" ? "bg-emerald-600/20" : theme === "gold" ? "bg-amber-500/20" : "bg-indigo-600/20"
+      }`} />
+      <div className={`absolute -right-48 top-1/4 h-[500px] w-[500px] rounded-full blur-[140px] ${
+        theme === "neon" ? "bg-cyan-600/15" : theme === "gold" ? "bg-orange-600/15" : "bg-purple-600/15"
+      }`} />
     </div>
   );
 });
@@ -306,7 +278,7 @@ const DecorBackground = memo(({ theme = "indigo" }: { theme?: string }) => {
 DecorBackground.displayName = "DecorBackground";
 
 /* -------------------------------------------------------------------------- */
-/*                           Stats Card Component                             */
+/*                           STATIC Stats Card                               */
 /* -------------------------------------------------------------------------- */
 
 interface StatsCardProps {
@@ -323,63 +295,54 @@ interface StatsCardProps {
 
 const StatsCard = memo(({ stat }: StatsCardProps) => {
   const Icon = stat.icon;
+  const isMobile = useIsMobile();
+  const hoverClass = isMobile ? "" : "hover:border-indigo-500/40 hover:bg-white/[0.08] hover:shadow-2xl";
 
   return (
-    <motion.div
-      variants={cardVariants}
-      whileHover="hover"
-      className="group h-full will-change-transform"
-    >
-      <Link href={stat.href} className="block h-full">
-        <div className="relative flex h-full min-h-[135px] flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-white/[0.01] p-4.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-indigo-500/50 hover:bg-white/[0.1] hover:shadow-[0_12px_40px_0_rgba(79,70,229,0.25)] sm:p-5">
-          {/* Cyber Edge Reflection */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-          
+    <Link href={stat.href} className="block h-full">
+      <div className={`relative flex h-full min-h-[120px] flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-4 shadow-xl backdrop-blur-xl transition-all duration-150 ${hoverClass} sm:p-5`}>
+        <div
+          className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-r ${stat.color} opacity-15 blur-3xl transition-opacity duration-300 group-hover:opacity-30`}
+        />
+
+        <div className="relative flex items-center justify-between gap-2">
           <div
-            className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-r ${stat.color} opacity-20 blur-3xl transition-all duration-500 group-hover:scale-125 group-hover:opacity-45`}
-          />
-
-          <div className="relative flex items-center justify-between gap-2">
-            <div
-              className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${stat.color} shadow-lg shadow-black/40 ring-1 ring-white/25 transition-transform duration-300 group-hover:scale-110 sm:h-12 sm:w-12`}
-            >
-              <Icon className="h-5 w-5 text-white sm:h-6 sm:w-6" />
-            </div>
-            {stat.trend && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black shadow-sm ${
-                  stat.trend.isPositive
-                    ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
-                    : "border border-rose-500/40 bg-rose-500/20 text-rose-300"
-                }`}
-              >
-                {stat.trend.isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                {Math.abs(stat.trend.value)}%
-              </span>
-            )}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.color} shadow-lg shadow-black/30 ring-1 ring-white/20 transition-transform duration-150 group-hover:scale-105 sm:h-11 sm:w-11`}
+          >
+            <Icon className="h-5 w-5 text-white" />
           </div>
+          {stat.trend && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+                stat.trend.isPositive
+                  ? "border border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+                  : "border border-red-500/30 bg-red-500/15 text-red-400"
+              }`}
+            >
+              {stat.trend.isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              {Math.abs(stat.trend.value)}%
+            </span>
+          )}
+        </div>
 
-          <div className="relative mt-4">
-            <p className="font-mono text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-3xl">
-              {stat.value.toLocaleString()}
-            </p>
-            <div className="mt-1 flex items-center justify-between border-t border-white/[0.06] pt-2">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-300">
-                {stat.name}
-              </p>
-              <span className="text-[10px] font-medium text-gray-500">{stat.subtitle}</span>
-            </div>
+        <div className="relative mt-3">
+          <p className="text-2xl font-black tracking-tight text-white sm:text-3xl">
+            {stat.value.toLocaleString()}
+          </p>
+          <div className="mt-1 flex items-center justify-between border-t border-white/[0.05] pt-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{stat.name}</p>
+            <span className="text-[9px] font-medium text-gray-500">{stat.subtitle}</span>
           </div>
         </div>
-      </Link>
-    </motion.div>
+      </div>
+    </Link>
   );
 });
 
 StatsCard.displayName = "StatsCard";
 
 /* -------------------------------------------------------------------------- */
-/*                         Quick Action Button Component                      */
+/*                           STATIC Quick Action                             */
 /* -------------------------------------------------------------------------- */
 
 interface QuickActionProps {
@@ -389,132 +352,44 @@ interface QuickActionProps {
     icon: React.ElementType;
     color: string;
     badge?: number;
-    shortcut?: string;
   };
-  onCommandClick?: (href: string) => void;
 }
 
-const QuickAction = memo(({ action, onCommandClick }: QuickActionProps) => {
+const QuickAction = memo(({ action }: QuickActionProps) => {
   const Icon = action.icon;
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (onCommandClick) {
-      e.preventDefault();
-      onCommandClick(action.href);
-    }
-  };
-
   return (
-    <motion.div
-      variants={itemVariants}
-      whileHover={{ y: -3, scale: 1.03 }}
-      whileTap={{ scale: 0.97 }}
-      transition={{ type: "spring", stiffness: 400, damping: 22 }}
-      className="will-change-transform"
+    <Link
+      href={action.href}
+      className={`group relative flex min-h-[60px] flex-col items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br ${action.color} p-3 text-center shadow-lg transition-all duration-150 hover:shadow-xl sm:min-h-[68px] sm:p-3.5`}
     >
-      <Link
-        href={action.href}
-        onClick={handleClick}
-        className={`group relative flex min-h-[70px] flex-col items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br ${action.color} p-3.5 text-center shadow-xl transition-all duration-300 hover:shadow-2xl sm:min-h-[80px] sm:p-4`}
-      >
-        <div className="absolute inset-0 bg-black/15 transition-colors duration-300 group-hover:bg-transparent" />
-        <div className="relative flex flex-col items-center">
-          <Icon className="mb-1.5 h-5 w-5 text-white/95 transition-transform duration-300 group-hover:scale-110 sm:h-6 sm:w-6" />
-          <span className="text-xs font-extrabold tracking-wide text-white/95">{action.label}</span>
-          
-          {action.shortcut && (
-            <span className="mt-1 rounded bg-black/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-              {action.shortcut}
-            </span>
-          )}
-
-          {action.badge !== undefined && action.badge > 0 && (
-            <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-red-600 text-[10px] font-black text-white shadow-lg shadow-red-600/50 animate-pulse">
-              {action.badge > 9 ? "9+" : action.badge}
-            </span>
-          )}
-        </div>
-      </Link>
-    </motion.div>
+      <div className="absolute inset-0 bg-black/10 transition-colors duration-150 group-hover:bg-transparent" />
+      <div className="relative flex flex-col items-center">
+        <Icon className="mb-1 h-4 w-4 text-white/95 transition-transform duration-150 group-hover:scale-105 sm:h-5 sm:w-5" />
+        <span className="text-[10px] font-bold tracking-wide text-white/95 sm:text-xs">{action.label}</span>
+        {action.badge !== undefined && action.badge > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full border border-white/20 bg-red-600 text-[8px] font-black text-white shadow-lg shadow-red-600/40">
+            {action.badge > 9 ? "9+" : action.badge}
+          </span>
+        )}
+      </div>
+    </Link>
   );
 });
 
 QuickAction.displayName = "QuickAction";
 
 /* -------------------------------------------------------------------------- */
-/*                        System Status Card Component                        */
+/*                           STATIC Activity List                            */
 /* -------------------------------------------------------------------------- */
 
-interface SystemStatusCardProps {
-  title: string;
-  status: string;
-  icon: React.ElementType;
-  details?: { label: string; value: string }[];
-  statusColor: string;
-  pingMs?: number;
+interface ActivityListProps {
+  activities: ActivityItem[];
 }
 
-const SystemStatusCard = memo(({ title, status, icon: Icon, details, statusColor, pingMs }: SystemStatusCardProps) => (
-  <motion.div
-    variants={itemVariants}
-    whileHover={{ y: -2 }}
-    className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-white/[0.01] p-3.5 transition-all duration-300 hover:border-indigo-500/40 hover:bg-white/[0.07] sm:p-4"
-  >
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] ring-1 ring-white/10">
-          <Icon className={`h-4 w-4 ${statusColor}`} />
-        </div>
-        <span className="text-xs font-bold uppercase tracking-wider text-gray-200">{title}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        {pingMs !== undefined && (
-          <span className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[10px] font-bold text-gray-400">
-            {pingMs}ms
-          </span>
-        )}
-        <div className="flex items-center gap-1.5">
-          {status === "online" || status === "healthy" || status === "connected" ? (
-            <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
-          ) : status === "warning" ? (
-            <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
-          ) : (
-            <XCircle className="h-3.5 w-3.5 text-rose-400" />
-          )}
-          <span
-            className={`text-xs font-extrabold ${
-              status === "online" || status === "healthy" || status === "connected"
-                ? "text-emerald-400"
-                : status === "warning"
-                ? "text-amber-400"
-                : "text-rose-400"
-            }`}
-          >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </span>
-        </div>
-      </div>
-    </div>
-    {details && (
-      <div className="mt-3 space-y-1 border-t border-white/[0.06] pt-2.5">
-        {details.map((detail, i) => (
-          <div key={i} className="flex items-center justify-between text-xs">
-            <span className="text-gray-400">{detail.label}</span>
-            <span className="font-mono font-semibold text-white">{detail.value}</span>
-          </div>
-        ))}
-      </div>
-    )}
-  </motion.div>
-));
-
-SystemStatusCard.displayName = "SystemStatusCard";
-
-/* -------------------------------------------------------------------------- */
-/*                           Activity Item Component                          */
-/* -------------------------------------------------------------------------- */
-
-const ActivityItem = memo(({ activity }: { activity: ActivityItem }) => {
+const ActivityList = memo(({ activities }: ActivityListProps) => {
+  const isMobile = useIsMobile();
+  
   const formatTime = (timeStr: string) => {
     try {
       const date = new Date(timeStr);
@@ -533,132 +408,171 @@ const ActivityItem = memo(({ activity }: { activity: ActivityItem }) => {
     }
   };
 
+  const displayActivities = isMobile ? activities.slice(0, 5) : activities;
+
+  if (activities.length === 0) {
+    return (
+      <div className="flex h-[200px] flex-col items-center justify-center text-center">
+        <Activity className="h-8 w-8 text-gray-600" />
+        <p className="mt-2 text-sm font-bold text-white">No activity logged</p>
+        <p className="text-xs text-gray-400">Events will populate automatically</p>
+      </div>
+    );
+  }
+
   return (
-    <motion.div
-      variants={itemVariants}
-      whileHover={{ x: 5 }}
-      className="group flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 transition-all duration-300 hover:border-indigo-500/40 hover:bg-white/[0.07] will-change-transform"
-    >
-      <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 text-indigo-300 ring-1 ring-white/15 transition-transform duration-300 group-hover:scale-110">
-        {activity.type === "user" ? (
-          <Users className="h-4 w-4 text-cyan-400" />
-        ) : activity.type === "match" ? (
-          <Trophy className="h-4 w-4 text-amber-400" />
-        ) : activity.type === "payment" ? (
-          <DollarSign className="h-4 w-4 text-emerald-400" />
-        ) : (
-          <Activity className="h-4 w-4 text-purple-400" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
-          {activity.action}
-        </p>
-        <p className="mt-0.5 truncate text-xs text-gray-300">{activity.description}</p>
-        <p className="mt-1 text-[11px] font-medium text-gray-400">
-          Logged by <span className="font-semibold text-gray-200">{activity.user || "System AI"}</span>
-        </p>
-      </div>
-      <span className="flex-shrink-0 rounded-md bg-black/40 px-2 py-1 font-mono text-[10px] font-bold text-gray-400 ring-1 ring-white/10">
-        {formatTime(activity.time)}
-      </span>
-    </motion.div>
+    <div className="space-y-1.5">
+      {displayActivities.map((activity, index) => (
+        <div key={activity.id || index} className="px-1 py-1">
+          <div className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 transition-all duration-150 hover:border-indigo-500/30 hover:bg-white/[0.06]">
+            <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-300 ring-1 ring-white/10">
+              {activity.type === "user" ? (
+                <Users className="h-3.5 w-3.5 text-blue-400" />
+              ) : activity.type === "match" ? (
+                <Trophy className="h-3.5 w-3.5 text-amber-400" />
+              ) : activity.type === "payment" ? (
+                <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <Activity className="h-3.5 w-3.5 text-purple-400" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-white">{activity.action}</p>
+              <p className="mt-0.5 truncate text-[10px] text-gray-300">{activity.description}</p>
+              <p className="mt-0.5 text-[10px] font-medium text-gray-400">
+                by <span className="font-semibold text-gray-200">{activity.user || "System"}</span>
+              </p>
+            </div>
+            <span className="flex-shrink-0 rounded bg-black/40 px-1.5 py-0.5 font-mono text-[9px] font-bold text-gray-400 ring-1 ring-white/10">
+              {formatTime(activity.time)}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 });
 
-ActivityItem.displayName = "ActivityItem";
+ActivityList.displayName = "ActivityList";
 
 /* -------------------------------------------------------------------------- */
-/*               Admin Quick Command Launcher Palette Component              */
+/*                           STATIC Charts                                   */
 /* -------------------------------------------------------------------------- */
 
-const AdminCommandPalette = memo(({ isOpen, onClose, quickActions }: {
-  isOpen: boolean;
-  onClose: () => void;
-  quickActions: any[];
-}) => {
-  const [query, setQuery] = useState("");
+const RevenueChart = memo(({ data, tab }: { data: any; tab: string }) => {
+  const { ref, inView } = useInView({ triggerOnce: true, threshold: 0.1 });
+  const isMobile = useIsMobile();
 
-  if (!isOpen) return null;
+  if (!inView) {
+    return <div ref={ref} className="h-24 w-full animate-pulse rounded-lg bg-white/5" />;
+  }
 
-  const filtered = quickActions.filter(a =>
-    a.label.toLowerCase().includes(query.toLowerCase()) ||
-    a.href.toLowerCase().includes(query.toLowerCase())
-  );
+  const chartData = tab === "season" ? data?.revenueBySeason : data?.monthlyRevenue;
+  if (!chartData?.length) {
+    return (
+      <div ref={ref} className="flex h-20 items-center justify-center text-center">
+        <p className="text-xs text-gray-400">No revenue data available</p>
+      </div>
+    );
+  }
+
+  const max = Math.max(...chartData.map((item: any) => item.total || item.revenue || 0), 1);
+  const displayCount = isMobile ? Math.min(4, chartData.length) : Math.min(6, chartData.length);
+  const dataSlice = chartData.slice(0, displayCount);
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-4 pt-[15vh] backdrop-blur-md">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: -20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: -20 }}
-          className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/20 bg-[#0c1024] shadow-2xl shadow-indigo-950/80 ring-1 ring-white/10"
-        >
-          <div className="flex items-center border-b border-white/10 bg-white/[0.04] px-4 py-3">
-            <Command className="h-5 w-5 text-indigo-400 mr-3" />
-            <input
-              type="text"
-              placeholder="Search admin actions, routes, command shortcuts..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full bg-transparent text-sm font-semibold text-white placeholder-gray-500 focus:outline-none"
-              autoFocus
+    <div ref={ref} className="flex items-end gap-2 h-20 pt-2">
+      {dataSlice.map((item: any, i: number) => {
+        const value = item.total || item.revenue || 0;
+        const height = Math.max(12, Math.round((value / max) * 60));
+        const label = item.name || item.month || `Item ${i + 1}`;
+        const color = tab === "season" 
+          ? "bg-gradient-to-t from-emerald-600 via-emerald-500 to-teal-400"
+          : "bg-gradient-to-t from-teal-600 via-cyan-500 to-blue-400";
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <span className="font-mono text-[9px] font-bold text-white opacity-0 transition-opacity group-hover/bar:opacity-100">
+              {(value / 1000).toFixed(0)}k
+            </span>
+            <div
+              className={`w-full rounded-t-lg ${color} shadow-md transition-all duration-150`}
+              style={{ height: `${height}px` }}
             />
-            <button
-              onClick={onClose}
-              className="rounded-lg bg-white/10 px-2 py-1 text-[10px] font-bold text-gray-300 hover:bg-white/20"
-            >
-              ESC
-            </button>
+            <p className="w-full truncate text-center text-[9px] font-bold text-gray-400">
+              {label.substring(0, 6)}
+            </p>
           </div>
-
-          <div className="max-h-80 overflow-y-auto p-3 space-y-1.5">
-            {filtered.length === 0 ? (
-              <div className="py-8 text-center text-xs text-gray-400">
-                No matching admin commands found for &ldquo;<span className="text-white font-bold">{query}</span>&rdquo;
-              </div>
-            ) : (
-              filtered.map((action, i) => {
-                const Icon = action.icon;
-                return (
-                  <Link
-                    key={i}
-                    href={action.href}
-                    onClick={onClose}
-                    className="flex items-center justify-between rounded-xl border border-transparent p-3 transition-all hover:border-indigo-500/40 hover:bg-indigo-600/20 group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${action.color} text-white`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-white group-hover:text-indigo-300">{action.label}</p>
-                        <p className="text-[11px] font-mono text-gray-400">{action.href}</p>
-                      </div>
-                    </div>
-                    {action.badge !== undefined && action.badge > 0 && (
-                      <span className="rounded-full bg-red-600/30 px-2 py-0.5 text-xs font-bold text-red-300">
-                        {action.badge} Pending
-                      </span>
-                    )}
-                  </Link>
-                );
-              })
-            )}
-          </div>
-
-          <div className="border-t border-white/10 bg-black/40 px-4 py-2 flex items-center justify-between text-[11px] text-gray-400">
-            <span>Pro Tip: Use keyboard navigation or tap directly</span>
-            <span className="font-mono text-indigo-400">Nexus OS v3.0</span>
-          </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+        );
+      })}
+    </div>
   );
 });
 
-AdminCommandPalette.displayName = "AdminCommandPalette";
+RevenueChart.displayName = "RevenueChart";
+
+const EngagementChart = memo(({ data }: { data: any }) => {
+  const { ref, inView } = useInView({ triggerOnce: true, threshold: 0.1 });
+  const isMobile = useIsMobile();
+
+  if (!inView) {
+    return <div ref={ref} className="h-20 w-full animate-pulse rounded-lg bg-white/5" />;
+  }
+
+  if (!data?.dailyActivity?.length) {
+    return (
+      <div ref={ref} className="flex h-20 items-center justify-center text-center">
+        <p className="text-xs text-gray-400">No activity data available</p>
+      </div>
+    );
+  }
+
+  const max = Math.max(...data.dailyActivity.map((d: any) => d.activePlayers), 1);
+  const displayCount = isMobile ? Math.min(5, data.dailyActivity.length) : Math.min(7, data.dailyActivity.length);
+  const dataSlice = data.dailyActivity.slice(-displayCount);
+
+  return (
+    <div ref={ref} className="flex items-end gap-2 h-20 pt-2">
+      {dataSlice.map((day: any, i: number) => {
+        const height = Math.max(12, Math.round((day.activePlayers / max) * 60));
+        const isMax = day.activePlayers === max;
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <span className="font-mono text-[9px] font-bold text-white opacity-0 transition-opacity group-hover/bar:opacity-100">
+              {day.activePlayers}
+            </span>
+            <div
+              className={`w-full rounded-t-lg transition-all duration-150 ${
+                isMax
+                  ? "bg-gradient-to-t from-pink-600 via-purple-500 to-indigo-400 shadow-lg shadow-purple-500/30"
+                  : "bg-gradient-to-t from-indigo-600 via-indigo-500 to-purple-400 shadow-md"
+              }`}
+              style={{ height: `${height}px` }}
+            />
+            <p className="w-full truncate text-center text-[8px] font-bold text-gray-400">
+              {day.date.split(" ")[0] || `D${i + 1}`}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+EngagementChart.displayName = "EngagementChart";
+
+/* -------------------------------------------------------------------------- */
+/*                     Lazy Loaded Section Wrapper                            */
+/* -------------------------------------------------------------------------- */
+
+function LazySection({ children, height = 200 }: { children: React.ReactNode; height?: number }) {
+  const { ref, inView } = useInView({ triggerOnce: true, threshold: 0.05 });
+
+  return (
+    <div ref={ref} className="w-full">
+      {inView ? children : <div className={`h-${height} animate-pulse rounded-2xl bg-white/5`} />}
+    </div>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /*                               Main Component                               */
@@ -666,246 +580,357 @@ AdminCommandPalette.displayName = "AdminCommandPalette";
 
 export default function AdminDashboard() {
   const { data: session } = useSession();
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [refreshing, setRefreshing] = useState(false);
+  const [isForceRefreshing, setIsForceRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  
-  // Advanced Control States
+
   const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d" | "season">("7d");
-  const [viewMode, setViewMode] = useState<"grid" | "compact" | "telemetry">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "compact">("grid");
   const [themeMode, setThemeMode] = useState<"indigo" | "neon" | "gold">("indigo");
   const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "info">("all");
-  const [revenueTab, setRevenueTab] = useState<"season" | "monthly" | "recent">("season");
-  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [revenueTab, setRevenueTab] = useState<"season" | "monthly">("season");
 
-  // State for all data
-  const [overview, setOverview] = useState<OverviewStats | null>(null);
-  const [revenue, setRevenue] = useState<RevenueData | null>(null);
-  const [engagement, setEngagement] = useState<EngagementData | null>(null);
-  const [tournamentHealth, setTournamentHealth] = useState<TournamentHealthData | null>(null);
-  const [alerts, setAlerts] = useState<AlertData | null>(null);
-  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
-  const [topContributors, setTopContributors] = useState<TopContributor[]>([]);
-  const [squadData, setSquadData] = useState<SquadData | null>(null);
-  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
-  const [verificationQueue, setVerificationQueue] = useState<VerificationItem[]>([]);
+  // ✅ React Query for Overview - Live data with auto-refresh
+  const { data: overview, isLoading: overviewLoading, refetch: refetchOverview } = useQuery<OverviewStats>({
+    queryKey: ["admin-overview", timeRange],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/overview?range=${timeRange}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch overview");
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 30000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
 
-  // Keyboard shortcut listener for Command Palette (Ctrl+K or Cmd+K)
+  // ✅ Revenue Data
+  const { data: revenue, refetch: refetchRevenue } = useQuery<RevenueData>({
+    queryKey: ["admin-revenue", timeRange],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/revenue?range=${timeRange}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch revenue");
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 30000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Engagement Data
+  const { data: engagement, refetch: refetchEngagement } = useQuery<EngagementData>({
+    queryKey: ["admin-engagement", timeRange],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/engagement?range=${timeRange}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch engagement");
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 30000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Tournament Health
+  const { data: tournamentHealth, refetch: refetchTournament } = useQuery<TournamentHealthData>({
+    queryKey: ["admin-tournament-health", timeRange],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/tournament-health?range=${timeRange}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch tournament health");
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 30000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Alerts
+  const { data: alerts, refetch: refetchAlerts } = useQuery<AlertData>({
+    queryKey: ["admin-alerts"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/alerts`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch alerts");
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 15000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Recent Activity
+  const { data: recentActivity = [], refetch: refetchActivity } = useQuery<ActivityItem[]>({
+    queryKey: ["admin-recent-activity"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/recent-activity`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch activity");
+      const data = await res.json();
+      return Array.isArray(data) ? data.slice(0, 100) : [];
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 30000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Top Contributors
+  const { data: topContributors = [] } = useQuery<TopContributor[]>({
+    queryKey: ["admin-top-contributors"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/top-contributors`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 60000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Squad Data
+  const { data: squadData } = useQuery<SquadData>({
+    queryKey: ["admin-squad-overview"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/squad-overview`, { credentials: "include" });
+      if (!res.ok) return { total: 0, active: 0, verified: 0, avgMembers: 0 };
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 60000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Backup Status
+  const { data: backupStatus } = useQuery<BackupStatus>({
+    queryKey: ["admin-backup-status"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/backup-status`, { credentials: "include" });
+      if (!res.ok) return { lastBackup: "", size: "0 MB", status: "unknown" };
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 60000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // ✅ Verification Queue
+  const { data: verificationQueue = [] } = useQuery<VerificationItem[]>({
+    queryKey: ["admin-verification-queue"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/verification-queue`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 30000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    enabled: !!session,
+  });
+
+  // Update lastUpdated when data changes
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setIsCommandOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  // Fetch all data in parallel
-  const fetchAllData = useCallback(async () => {
-    try {
-      setRefreshing(true);
-
-      const [
-        overviewRes,
-        revenueRes,
-        engagementRes,
-        tournamentRes,
-        alertsRes,
-        activityRes,
-        contributorsRes,
-        squadRes,
-        backupRes,
-        verificationRes,
-      ] = await Promise.all([
-        fetch(`/api/admin/overview?range=${timeRange}`, { credentials: "include" }),
-        fetch(`/api/admin/revenue?range=${timeRange}`, { credentials: "include" }),
-        fetch(`/api/admin/engagement?range=${timeRange}`, { credentials: "include" }),
-        fetch(`/api/admin/tournament-health?range=${timeRange}`, { credentials: "include" }),
-        fetch(`/api/admin/alerts`, { credentials: "include" }),
-        fetch(`/api/admin/recent-activity`, { credentials: "include" }),
-        fetch(`/api/admin/top-contributors`, { credentials: "include" }).catch(() => null),
-        fetch(`/api/admin/squad-overview`, { credentials: "include" }).catch(() => null),
-        fetch(`/api/admin/backup-status`, { credentials: "include" }).catch(() => null),
-        fetch(`/api/admin/verification-queue`, { credentials: "include" }).catch(() => null),
-      ]);
-
-      const [
-        overviewData,
-        revenueData,
-        engagementData,
-        tournamentData,
-        alertsData,
-        activityData,
-        contributorsData,
-        squadInfoData,
-        backupData,
-        verificationData,
-      ] = await Promise.all([
-        overviewRes.json().catch(() => null),
-        revenueRes.json().catch(() => null),
-        engagementRes.json().catch(() => null),
-        tournamentRes.json().catch(() => null),
-        alertsRes.json().catch(() => null),
-        activityRes.json().catch(() => null),
-        contributorsRes?.json().catch(() => null) || null,
-        squadRes?.json().catch(() => null) || null,
-        backupRes?.json().catch(() => null) || null,
-        verificationRes?.json().catch(() => null) || null,
-      ]);
-
-      if (overviewData) setOverview(overviewData);
-      if (revenueData) setRevenue(revenueData);
-      if (engagementData) setEngagement(engagementData);
-      if (tournamentData) setTournamentHealth(tournamentData);
-      if (alertsData) setAlerts(alertsData);
-      if (Array.isArray(activityData)) setRecentActivity(activityData);
-      if (Array.isArray(contributorsData)) setTopContributors(contributorsData);
-      if (squadInfoData) setSquadData(squadInfoData);
-      if (backupData) setBackupStatus(backupData);
-      if (Array.isArray(verificationData)) setVerificationQueue(verificationData);
-
+    if (overview || revenue || engagement) {
       setLastUpdated(new Date());
+    }
+  }, [overview, revenue, engagement]);
+
+  // ✅ Manual Refresh (existing)
+  const fetchAllData = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetchOverview(),
+        refetchRevenue(),
+        refetchEngagement(),
+        refetchTournament(),
+        refetchAlerts(),
+        refetchActivity(),
+      ]);
+      setLastUpdated(new Date());
+      toast.success("✅ Dashboard refreshed");
     } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-      toast.error("Failed to refresh admin telemetry");
+      console.error("Error refreshing dashboard:", error);
+      toast.error("Failed to refresh dashboard");
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
-  }, [timeRange]);
+  }, [refetchOverview, refetchRevenue, refetchEngagement, refetchTournament, refetchAlerts, refetchActivity]);
 
-  // Initial fetch and auto-refresh interval
-  useEffect(() => {
-    fetchAllData();
+  // ✅ FORCE REFRESH - Invalidates ALL queries and refetches everything
+  const handleForceRefresh = useCallback(async () => {
+    setIsForceRefreshing(true);
+    toast.loading("🔄 Refreshing all data...", { duration: 0 });
+    
+    try {
+      // ✅ Invalidate ALL queries in the cache
+      await queryClient.invalidateQueries();
+      
+      // ✅ Refetch ALL active queries
+      await queryClient.refetchQueries({
+        type: 'active',
+        exact: false,
+      });
+      
+      // ✅ Also refetch inactive queries to ensure everything is fresh
+      await queryClient.refetchQueries({
+        type: 'inactive',
+        exact: false,
+      });
+      
+      setLastUpdated(new Date());
+      toast.dismiss();
+      toast.success("✅ All data refreshed successfully!");
+    } catch (error) {
+      console.error("Error during force refresh:", error);
+      toast.dismiss();
+      toast.error("Failed to refresh some data. Please try again.");
+    } finally {
+      setIsForceRefreshing(false);
+    }
+  }, [queryClient]);
 
-    const interval = setInterval(() => {
-      fetchAllData();
-    }, 60000); // Auto-refresh every 60s
-
-    return () => clearInterval(interval);
-  }, [fetchAllData]);
-
-  // Stats grid data with advanced context
+  // Computed stats
   const statsData = useMemo(() => {
     if (!overview) return [];
     return [
       {
-        name: "Total Registered Athletes",
+        name: "Total Athletes",
         value: overview.stats.totalPlayers,
         icon: Users,
-        color: "from-blue-600 via-indigo-600 to-cyan-500",
+        color: "from-blue-600 to-cyan-500",
         href: "/admin/players",
-        subtitle: `${overview.stats.activePlayers || Math.round(overview.stats.totalPlayers * 0.74)} active rosters`,
+        subtitle: `${overview.stats.activePlayers || 0} active`,
         trend: { value: overview.growth.playerGrowthRate, isPositive: overview.growth.playerGrowthRate >= 0 },
       },
       {
-        name: "Gross Season Treasury",
+        name: "Total Revenue",
         value: overview.stats.totalRevenue,
         icon: DollarSign,
-        color: "from-emerald-600 via-teal-600 to-cyan-400",
+        color: "from-emerald-600 to-teal-500",
         href: "/admin/payments",
-        subtitle: `KES ${(revenue?.summary.averagePerEntry || 1500).toLocaleString()} avg entry`,
-        trend: { value: 14, isPositive: true },
+        subtitle: `KES ${(revenue?.summary.averagePerEntry || 0).toLocaleString()} avg`,
+        trend: { value: 12, isPositive: true },
       },
       {
-        name: "League Matches & Fixtures",
+        name: "Fixtures",
         value: overview.stats.totalFixtures,
         icon: Trophy,
-        color: "from-amber-500 via-orange-600 to-yellow-500",
+        color: "from-amber-500 to-orange-600",
         href: "/admin/league",
-        subtitle: `${overview.stats.completedResults} matches completed`,
-        trend: { value: overview.growth.resultGrowthRate || 9, isPositive: true },
+        subtitle: `${overview.stats.completedResults} completed`,
+        trend: { value: overview.growth.resultGrowthRate || 8, isPositive: true },
       },
       {
-        name: "Active League Seasons",
+        name: "Active Seasons",
         value: overview.stats.activeSeasons,
         icon: Calendar,
-        color: "from-purple-600 via-pink-600 to-rose-500",
+        color: "from-purple-600 to-pink-500",
         href: "/admin/seasons",
-        subtitle: `Out of ${overview.stats.totalSeasons} total seasons`,
+        subtitle: `of ${overview.stats.totalSeasons} total`,
         trend: { value: 0, isPositive: true },
       },
       {
-        name: "Pending Action Queue",
+        name: "Pending Actions",
         value: overview.stats.pendingResults + overview.stats.pendingPayments,
         icon: Clock,
-        color: "from-rose-600 via-red-600 to-pink-500",
+        color: "from-red-500 to-rose-600",
         href: "/admin/results",
-        subtitle: `${overview.stats.pendingResults} results / ${overview.stats.pendingPayments} payments`,
-        trend: { value: 6, isPositive: false },
+        subtitle: `${overview.stats.pendingResults} results`,
+        trend: { value: 5, isPositive: false },
       },
       {
-        name: "Distributed Trophy Awards",
+        name: "Total Awards",
         value: overview.stats.totalAwards,
         icon: Award,
-        color: "from-yellow-500 via-amber-500 to-orange-400",
+        color: "from-yellow-500 to-amber-600",
         href: "/admin/awards",
-        subtitle: `${overview.stats.totalTournaments} tournaments managed`,
-        trend: { value: 4, isPositive: true },
+        subtitle: `${overview.stats.totalTournaments} tournaments`,
+        trend: { value: 3, isPositive: true },
       },
     ];
   }, [overview, revenue]);
 
-  // Quick actions
   const quickActions = useMemo(() => {
     const pendingResults = overview?.stats.pendingResults || 0;
     const pendingPayments = overview?.stats.pendingPayments || 0;
 
-    return [
-      { href: "/admin/results", label: "Approve Results", icon: CheckCircle, color: "from-emerald-600 to-teal-600", badge: pendingResults, shortcut: "R" },
-      { href: "/admin/payments", label: "Verify Payments", icon: Wallet, color: "from-blue-600 to-cyan-600", badge: pendingPayments, shortcut: "P" },
-      { href: "/admin/seasons/create", label: "New Season", icon: Calendar, color: "from-purple-600 to-pink-600", shortcut: "S" },
-      { href: "/admin/fixtures/generate", label: "Generate Fixtures", icon: Zap, color: "from-amber-500 to-orange-600", shortcut: "F" },
-      { href: "/admin/tournaments/create", label: "Create Tournament", icon: Trophy, color: "from-indigo-600 to-purple-600", shortcut: "T" },
-      { href: "/admin/players", label: "Manage Players", icon: Users, color: "from-teal-600 to-cyan-600", shortcut: "U" },
-      { href: "/admin/communication", label: "Send Broadcast", icon: MessageCircle, color: "from-rose-600 to-pink-600", shortcut: "B" },
-      { href: "/admin/settings/backup", label: "Backup Snapshot", icon: Database, color: "from-slate-600 to-gray-700", shortcut: "D" },
+    const actions = [
+      { href: "/admin/results", label: "Approve Results", icon: CheckCircle, color: "from-emerald-600 to-teal-600", badge: pendingResults },
+      { href: "/admin/payments", label: "Verify Payments", icon: Wallet, color: "from-blue-600 to-cyan-600", badge: pendingPayments },
+      { href: "/admin/seasons/create", label: "New Season", icon: Calendar, color: "from-purple-600 to-pink-600" },
+      { href: "/admin/fixtures/generate", label: "Generate Fixtures", icon: Zap, color: "from-amber-500 to-orange-600" },
+      { href: "/admin/tournaments/create", label: "Create Tournament", icon: Trophy, color: "from-indigo-600 to-purple-600" },
+      { href: "/admin/players", label: "Manage Players", icon: Users, color: "from-teal-600 to-cyan-600" },
+      { href: "/admin/communication", label: "Send Broadcast", icon: MessageCircle, color: "from-rose-600 to-pink-600" },
+      { href: "/admin/settings/backup", label: "Backup Now", icon: Database, color: "from-slate-600 to-gray-700" },
     ];
-  }, [overview]);
 
-  // System status items
+    return isMobile ? actions.slice(0, 4) : actions;
+  }, [overview, isMobile]);
+
   const systemStatusItems = useMemo(
     () => [
       {
-        title: "PostgreSQL Database Core",
+        title: "Database Core",
         status: "connected",
         icon: Database,
         statusColor: "text-emerald-400",
-        pingMs: overview?.system.queryTime || 12,
-        details: [{ label: "Connection Pool", value: "32/40 Active" }],
+        details: [{ label: "Latency", value: `${overview?.system.queryTime || 12}ms` }],
       },
       {
-        title: "Nexus Edge API Gateway",
+        title: "API Gateway",
         status: "healthy",
         icon: Server,
         statusColor: "text-emerald-400",
-        pingMs: 4,
-        details: [{ label: "Endpoint SLA", value: "99.99% Uptime" }],
+        details: [{ label: "Uptime", value: "99.99%" }],
       },
       {
-        title: "Redis In-Memory Cache",
+        title: "Cache Layer",
         status: "healthy",
         icon: Gauge,
         statusColor: "text-emerald-400",
-        details: [{ label: "Cache Hit Efficiency", value: "95.4%" }],
+        details: [{ label: "Hit Rate", value: "94.2%" }],
       },
       {
-        title: "Platform Athlete Nodes",
+        title: "Platform Users",
         status: "online",
         icon: UsersIcon,
         statusColor: "text-blue-400",
         details: [
-          { label: "Total Registered", value: `${overview?.stats.totalPlayers || 0}` },
-          { label: "Concurrent Active", value: `${overview?.stats.activePlayers || 0}` },
+          { label: "Total", value: `${overview?.stats.totalPlayers || 0}` },
+          { label: "Active", value: `${overview?.stats.activePlayers || 0}` },
         ],
       },
     ],
     [overview]
   );
 
-  // Alert counts & filtered alerts
   const alertCounts = useMemo(
     () => ({
       total: alerts?.summary.total || 0,
@@ -917,59 +942,44 @@ export default function AdminDashboard() {
   );
 
   const filteredAlerts = useMemo(() => {
-    if (!alerts || !alerts.alerts) return [];
-    if (alertFilter === "all") return alerts.alerts;
-    return alerts.alerts.filter((a) => a.type === alertFilter);
+    if (!alerts?.alerts) return [];
+    return alertFilter === "all" ? alerts.alerts : alerts.alerts.filter((a) => a.type === alertFilter);
   }, [alerts, alertFilter]);
 
-  // Format backup time helper
   const formatBackupTime = (timeStr: string) => {
     if (!timeStr) return "Never";
     try {
       const date = new Date(timeStr);
       const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
+      const diffHours = Math.floor((now.getTime() - date.getTime()) / 3600000);
       if (diffHours < 1) return "Just now";
       if (diffHours < 24) return `${diffHours} hours ago`;
-      if (diffDays === 1) return "1 day ago";
-      return `${diffDays} days ago`;
+      return `${Math.floor(diffHours / 24)} days ago`;
     } catch {
       return timeStr;
     }
   };
 
-  if (loading) {
+  // Show loading only once
+  if (overviewLoading) {
     return (
       <>
         <DecorBackground theme={themeMode} />
         <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-7xl space-y-6">
-            {/* Header Skeleton */}
             <div className="animate-pulse rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 backdrop-blur-xl">
               <div className="h-8 w-72 rounded-lg bg-white/10" />
               <div className="mt-3 h-4 w-52 rounded bg-white/5" />
             </div>
-
-            {/* Controls Skeleton */}
-            <div className="flex justify-between">
-              <div className="h-10 w-64 animate-pulse rounded-xl bg-white/[0.05]" />
-              <div className="h-10 w-44 animate-pulse rounded-xl bg-white/[0.05]" />
-            </div>
-
-            {/* Stats Skeleton */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-36 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.04] p-4" />
+                <div key={i} className="h-32 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.04] p-4" />
               ))}
             </div>
-
-            {/* Middle Section Skeleton */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <div className="h-80 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.04] p-6 lg:col-span-1" />
-              <div className="h-80 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.04] p-6 lg:col-span-1" />
-              <div className="h-80 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.04] p-6 lg:col-span-1" />
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-80 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.04] p-6" />
+              ))}
             </div>
           </div>
         </div>
@@ -980,1052 +990,813 @@ export default function AdminDashboard() {
   return (
     <>
       <DecorBackground theme={themeMode} />
-      <AdminCommandPalette isOpen={isCommandOpen} onClose={() => setIsCommandOpen(false)} quickActions={quickActions} />
 
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="min-h-screen px-3 py-6 sm:px-6 sm:py-8 lg:px-8"
-      >
-        <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
-          {/* ===================================================================== */}
-          {/* 1. COMMAND HEADER & GLOBAL CONTROLS BAR                              */}
-          {/* ===================================================================== */}
-          <motion.div
-            variants={itemVariants}
-            className="relative overflow-hidden rounded-3xl border border-white/[0.12] bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-slate-950/80 p-5 shadow-[0_12px_48px_0_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:p-7"
-          >
-            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-purple-500/25 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-24 left-12 h-60 w-60 rounded-full bg-indigo-500/25 blur-3xl" />
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+      <div className="min-h-screen px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <div className="mx-auto max-w-7xl space-y-5 sm:space-y-6">
 
-            <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 shadow-xl shadow-indigo-950/80 ring-2 ring-white/20 sm:h-16 sm:w-16">
-                  <Zap className="h-7 w-7 text-white sm:h-8 sm:w-8 animate-pulse" />
+          {/* 1. HEADER */}
+          <div className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-slate-950/80 p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl sm:p-6">
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 shadow-xl shadow-indigo-950/60 ring-2 ring-white/20 sm:h-14 sm:w-14">
+                  <Zap className="h-6 w-6 text-white sm:h-7 sm:w-7" />
                 </div>
                 <div>
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl lg:text-4xl">
-                      Nexus Cyber-Admin Terminal
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl lg:text-3xl">
+                      Nexus Admin Hub
                     </h1>
-                    <span className="rounded-full border border-indigo-400/30 bg-indigo-500/20 px-2.5 py-0.5 font-mono text-xs font-bold tracking-wide text-indigo-300 shadow-sm">
-                      v3.0 PRO
+                    <span className="rounded-full border border-indigo-400/30 bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold tracking-wide text-indigo-300 shadow-sm">
+                      v3.0
                     </span>
                     {alertCounts.critical > 0 && (
-                      <span className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/20 px-3 py-0.5 text-xs font-black text-red-300 shadow-lg shadow-red-600/30 animate-pulse">
-                        <AlertOctagon className="h-3.5 w-3.5 text-red-400" />
-                        {alertCounts.critical} Critical Incidents
+                      <span className="flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/20 px-2.5 py-0.5 text-[10px] font-bold text-red-300 shadow-sm">
+                        <AlertOctagon className="h-3 w-3 text-red-400" />
+                        {alertCounts.critical} Critical
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-xs font-medium text-gray-300 sm:text-sm">
-                    Commanding live league telemetries, cash flow verifications, and match moderation pipelines.
+                  <p className="text-xs font-medium text-gray-300 sm:text-sm">
+                    Welcome back, {session?.user?.name || "Admin"}! Live telemetry &amp; match operations.
                   </p>
                 </div>
               </div>
 
-              {/* Action Buttons & Telemetry Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
-                {/* Command Palette Button */}
-                <button
-                  onClick={() => setIsCommandOpen(true)}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-indigo-500/40 bg-indigo-600/20 px-3.5 py-2 text-xs font-bold text-indigo-200 shadow-md backdrop-blur-md transition-all hover:bg-indigo-600/30 hover:text-white"
-                  title="Open Command Launcher (Ctrl+K)"
-                >
-                  <Command className="h-3.5 w-3.5 text-indigo-400" />
-                  <span className="hidden md:inline">Command Palette</span>
-                  <kbd className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-gray-300">⌘K</kbd>
-                </button>
-
-                {/* Status Ping */}
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3.5 py-2 backdrop-blur-md">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-1.5 backdrop-blur-md">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
                   </span>
-                  <span className="text-xs font-extrabold tracking-wide text-emerald-300">Socket: Live</span>
+                  <span className="text-[10px] font-bold tracking-wide text-emerald-300">Live</span>
                 </div>
 
-                {/* Last Updated */}
-                <span className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 font-mono text-xs font-medium text-gray-300 backdrop-blur-md">
-                  Updated: {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                <span className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 font-mono text-[10px] font-medium text-gray-300 backdrop-blur-md">
+                  {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                 </span>
 
-                {/* Manual Refresh min 44px */}
+                {/* ✅ FORCE REFRESH BUTTON */}
+                <button
+                  onClick={handleForceRefresh}
+                  disabled={isForceRefreshing}
+                  className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/15 px-4 py-1.5 text-sm font-bold text-indigo-300 shadow-lg backdrop-blur-md transition-all duration-150 hover:bg-indigo-500/25 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isForceRefreshing ? "animate-spin" : ""}`} />
+                  <span className="hidden sm:inline">
+                    {isForceRefreshing ? "Refreshing..." : "🔄 Refresh All"}
+                  </span>
+                  <span className="sm:hidden">
+                    <RefreshCw className={`h-4 w-4 ${isForceRefreshing ? "animate-spin" : ""}`} />
+                  </span>
+                </button>
+
+                {/* ✅ Existing Sync Button */}
                 <button
                   onClick={fetchAllData}
                   disabled={refreshing}
-                  className="group inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.08] px-4 py-2.5 text-sm font-bold text-gray-200 shadow-lg backdrop-blur-md transition-all duration-300 hover:border-white/30 hover:bg-white/[0.16] hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:opacity-50"
-                  title="Force Instant Telemetry Sync"
+                  className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl border border-white/15 bg-white/[0.08] px-3 py-1.5 text-sm font-bold text-gray-200 shadow-lg backdrop-blur-md transition-all duration-150 hover:border-white/30 hover:bg-white/[0.14] hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:opacity-50"
                 >
-                  <RefreshCw className={`h-4 w-4 transition-transform duration-500 ${refreshing ? "animate-spin text-indigo-400" : "group-hover:rotate-180"}`} />
-                  <span className="hidden sm:inline">Sync</span>
+                  <RefreshCw className={`h-4 w-4 transition-transform duration-300 ${refreshing ? "animate-spin text-indigo-400" : ""}`} />
+                  <span className="hidden sm:inline ml-1.5 text-xs">Sync</span>
                 </button>
               </div>
             </div>
 
-            {/* Advanced Global Controls Sub-bar */}
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4 text-xs">
-              {/* Time Range Selector */}
-              <div className="flex items-center gap-1.5 rounded-xl bg-black/40 p-1 ring-1 ring-white/10">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 text-xs">
+              <div className="flex items-center gap-1 rounded-xl bg-black/40 p-0.5 ring-1 ring-white/10">
                 {(["24h", "7d", "30d", "season"] as const).map((range) => (
                   <button
                     key={range}
                     onClick={() => setTimeRange(range)}
-                    className={`rounded-lg px-3 py-1.5 font-bold uppercase transition-all min-h-[36px] ${
+                    className={`rounded-lg px-2.5 py-1 font-bold uppercase transition-colors min-h-[32px] ${
                       timeRange === range
                         ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                         : "text-gray-400 hover:text-white"
                     }`}
                   >
-                    {range === "season" ? "Active Season" : range}
+                    {range === "season" ? "Season" : range}
                   </button>
                 ))}
               </div>
 
-              {/* View & Theme Switchers */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1 rounded-xl bg-black/40 p-1 ring-1 ring-white/10">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-0.5 rounded-xl bg-black/40 p-0.5 ring-1 ring-white/10">
                   <button
                     onClick={() => setViewMode("grid")}
-                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-bold transition-all min-h-[36px] ${
+                    className={`rounded-lg p-1.5 transition-colors min-h-[32px] min-w-[32px] ${
                       viewMode === "grid" ? "bg-white/15 text-white" : "text-gray-400 hover:text-white"
                     }`}
-                    title="Grid View"
                   >
                     <Grid className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Grid</span>
                   </button>
                   <button
                     onClick={() => setViewMode("compact")}
-                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 font-bold transition-all min-h-[36px] ${
+                    className={`rounded-lg p-1.5 transition-colors min-h-[32px] min-w-[32px] ${
                       viewMode === "compact" ? "bg-white/15 text-white" : "text-gray-400 hover:text-white"
                     }`}
-                    title="Compact Tabular View"
                   >
                     <List className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Dense</span>
                   </button>
                 </div>
 
-                <div className="flex items-center gap-1.5 rounded-xl bg-black/40 px-3 py-1.5 ring-1 ring-white/10 text-gray-300">
-                  <Sliders className="h-3.5 w-3.5 text-indigo-400" />
-                  <select
-                    value={themeMode}
-                    onChange={(e) => setThemeMode(e.target.value as any)}
-                    className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
-                  >
-                    <option value="indigo" className="bg-gray-900">Theme: Cyber Indigo</option>
-                    <option value="neon" className="bg-gray-900">Theme: Neon Emerald</option>
-                    <option value="gold" className="bg-gray-900">Theme: Royal Gold</option>
-                  </select>
-                </div>
+                <select
+                  value={themeMode}
+                  onChange={(e) => setThemeMode(e.target.value as any)}
+                  className="rounded-xl bg-black/40 px-2.5 py-1.5 text-xs font-bold text-white ring-1 ring-white/10 focus:outline-none cursor-pointer min-h-[32px]"
+                >
+                  <option value="indigo">Indigo</option>
+                  <option value="neon">Neon</option>
+                  <option value="gold">Gold</option>
+                </select>
               </div>
             </div>
-          </motion.div>
+          </div>
 
-          {/* ===================================================================== */}
-          {/* 2. STATS GRID (6 Key Performance Indicators)                          */}
-          {/* ===================================================================== */}
-          <motion.div
-            variants={containerVariants}
-            className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 sm:gap-4 items-stretch"
-          >
+          {/* 2. STATS GRID */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 sm:gap-4 items-stretch">
             {statsData.map((stat) => (
               <StatsCard key={stat.name} stat={stat} />
             ))}
-          </motion.div>
+          </div>
 
-          {/* ===================================================================== */}
-          {/* 3. QUICK ACTIONS | SYSTEM STATUS | ALERT CENTER                       */}
-          {/* ===================================================================== */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-stretch">
-            {/* Quick Actions Panel - 4 cols */}
-            <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col">
-              <div className="flex h-full min-h-[360px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
-                <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 ring-1 ring-amber-500/30">
-                      <Zap className="h-4 w-4 text-amber-400" />
+          {/* 3. QUICK ACTIONS | SYSTEM STATUS | ALERT CENTER */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-stretch">
+            {/* Quick Actions */}
+            <div className="lg:col-span-4 flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
+                <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 ring-1 ring-amber-500/30">
+                      <Zap className="h-3.5 w-3.5 text-amber-400" />
                     </div>
-                    <div>
-                      <h2 className="text-base font-extrabold text-white">Quick Actions Hub</h2>
-                      <p className="text-[10px] text-gray-400">Instant shortcuts &amp; batch triggers</p>
-                    </div>
+                    <h2 className="text-sm font-bold text-white">Quick Actions</h2>
                   </div>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-bold text-gray-400">
-                    8 Commands
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-gray-400">
+                    {quickActions.length}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-2 flex-1">
+                <div className={`grid ${isMobile ? "grid-cols-2" : "grid-cols-2"} gap-2 flex-1`}>
                   {quickActions.map((action) => (
                     <QuickAction key={action.label} action={action} />
                   ))}
                 </div>
               </div>
-            </motion.div>
+            </div>
 
-            {/* System Status Panel - 4 cols */}
-            <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col">
-              <div className="flex h-full min-h-[360px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
-                <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 ring-1 ring-indigo-500/30">
-                      <Server className="h-4 w-4 text-indigo-400" />
+            {/* System Status */}
+            <div className="lg:col-span-4 flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
+                <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/20 ring-1 ring-indigo-500/30">
+                      <Server className="h-3.5 w-3.5 text-indigo-400" />
                     </div>
-                    <div>
-                      <h2 className="text-base font-extrabold text-white">System Infrastructure</h2>
-                      <p className="text-[10px] text-gray-400">Database core &amp; Redis nodes</p>
-                    </div>
+                    <h2 className="text-sm font-bold text-white">System Status</h2>
                   </div>
-                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 font-mono text-[11px] font-extrabold text-emerald-300">
-                    {overview?.system.queryTime || 12}ms Latency
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300">
+                    {overview?.system.queryTime || 12}ms
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 flex-1">
+                <div className="grid grid-cols-1 gap-2 flex-1">
                   {systemStatusItems.map((item) => (
-                    <SystemStatusCard key={item.title} {...item} />
+                    <div key={item.title} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 transition-all duration-150 hover:border-indigo-500/30 hover:bg-white/[0.06]">
+                      <div className="flex items-center gap-2">
+                        <item.icon className={`h-3.5 w-3.5 ${item.statusColor}`} />
+                        <span className="text-xs font-bold text-gray-300">{item.title}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {item.details?.map((d, i) => (
+                          <span key={i} className="text-[10px] font-medium text-white">
+                            {d.value}
+                          </span>
+                        ))}
+                        <span className={`text-[10px] font-bold ${
+                          item.status === "connected" || item.status === "healthy" || item.status === "online"
+                            ? "text-emerald-400"
+                            : "text-amber-400"
+                        }`}>
+                          ●
+                        </span>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
-            </motion.div>
+            </div>
 
-            {/* Alert Center Panel - 4 cols */}
-            <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col">
-              <div className="flex h-full min-h-[360px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            {/* Alert Center */}
+            <div className="lg:col-span-4 flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/20 ring-1 ring-red-500/30">
-                        <BellRing className="h-4 w-4 text-red-400 animate-bounce" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/20 ring-1 ring-red-500/30">
+                        <BellRing className="h-3.5 w-3.5 text-red-400" />
                       </div>
-                      <div>
-                        <h2 className="text-base font-extrabold text-white">Platform Alert Center</h2>
-                        <p className="text-[10px] text-gray-400">Live anomalies &amp; system warnings</p>
-                      </div>
+                      <h2 className="text-sm font-bold text-white">Alerts</h2>
                     </div>
                     {alertCounts.total > 0 && (
-                      <span className="rounded-full border border-red-500/30 bg-red-500/20 px-2.5 py-1 text-xs font-black text-red-300 shadow-sm animate-pulse">
-                        {alertCounts.total} Active
+                      <span className="rounded-full border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">
+                        {alertCounts.total}
                       </span>
                     )}
                   </div>
 
-                  {/* Alert Category Filter Pills */}
-                  <div className="mb-3 flex items-center gap-1.5 border-b border-white/[0.06] pb-2.5 text-[11px]">
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {(["all", "critical", "warning", "info"] as const).map((filter) => (
                       <button
                         key={filter}
                         onClick={() => setAlertFilter(filter)}
-                        className={`rounded-lg px-2.5 py-1 font-bold uppercase transition-colors min-h-[32px] ${
+                        className={`rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase transition-colors min-h-[28px] ${
                           alertFilter === filter
                             ? "bg-white/15 text-white ring-1 ring-white/20"
                             : "text-gray-400 hover:text-white"
                         }`}
                       >
-                        {filter === "all" ? "All" : filter} {filter === "critical" ? `(${alertCounts.critical})` : ""}
+                        {filter} {filter === "critical" && `(${alertCounts.critical})`}
                       </button>
                     ))}
                   </div>
 
-                  <div className="max-h-[220px] overflow-y-auto pr-1">
+                  <div className="max-h-[180px] overflow-y-auto pr-1 space-y-1.5">
                     {filteredAlerts.length > 0 ? (
-                      <div className="space-y-2.5">
-                        {filteredAlerts.slice(0, 4).map((alert) => (
-                          <motion.div
-                            key={alert.id}
-                            variants={itemVariants}
-                            className={`flex items-start justify-between gap-3 rounded-xl border p-3.5 transition-all duration-200 hover:bg-white/[0.08] ${
-                              alert.type === "critical"
-                                ? "border-rose-500/40 bg-rose-500/10 shadow-sm shadow-rose-950/50"
-                                : alert.type === "warning"
-                                ? "border-amber-500/40 bg-amber-500/10 shadow-sm shadow-amber-950/50"
-                                : "border-blue-500/40 bg-blue-500/10 shadow-sm"
-                            }`}
-                          >
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              {alert.type === "critical" ? (
-                                <AlertOctagon className="mt-0.5 h-4 w-4 flex-shrink-0 text-rose-400 animate-pulse" />
-                              ) : alert.type === "warning" ? (
-                                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
-                              ) : (
-                                <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-400" />
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-extrabold text-white">{alert.title}</p>
-                                <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-300">{alert.message}</p>
-                              </div>
+                      filteredAlerts.slice(0, isMobile ? 3 : 4).map((alert) => (
+                        <div
+                          key={alert.id}
+                          className={`flex items-start justify-between gap-2 rounded-xl border p-2.5 transition-all duration-150 ${
+                            alert.type === "critical"
+                              ? "border-rose-500/30 bg-rose-500/10"
+                              : alert.type === "warning"
+                              ? "border-amber-500/30 bg-amber-500/10"
+                              : "border-blue-500/30 bg-blue-500/10"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2 min-w-0">
+                            {alert.type === "critical" ? (
+                              <AlertOctagon className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-rose-400" />
+                            ) : alert.type === "warning" ? (
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-400" />
+                            ) : (
+                              <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-blue-400" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[11px] font-bold text-white">{alert.title}</p>
+                              <p className="mt-0.5 line-clamp-1 text-[10px] text-gray-300">{alert.message}</p>
                             </div>
-                            <Link
-                              href={alert.action || "/admin"}
-                              className="flex-shrink-0 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-bold text-indigo-300 transition-colors hover:bg-indigo-600 hover:text-white"
-                            >
-                              Resolve
-                            </Link>
-                          </motion.div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex h-full min-h-[160px] flex-col items-center justify-center text-center">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
-                          <CheckCircle className="h-6 w-6 text-emerald-400" />
+                          </div>
+                          <Link
+                            href={alert.action || "/admin"}
+                            className="flex-shrink-0 rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-indigo-300 transition-colors hover:bg-indigo-600 hover:text-white"
+                          >
+                            Fix
+                          </Link>
                         </div>
-                        <p className="mt-3 text-sm font-extrabold text-white">All Clear &amp; Operational</p>
-                        <p className="mt-1 text-xs text-gray-400">No matching system alerts logged</p>
+                      ))
+                    ) : (
+                      <div className="flex h-[120px] flex-col items-center justify-center text-center">
+                        <CheckCircle className="h-6 w-6 text-emerald-400" />
+                        <p className="mt-2 text-xs font-bold text-white">All Clear</p>
+                        <p className="text-[10px] text-gray-400">No active alerts</p>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          {/* ===================================================================== */}
-          {/* 4. REVENUE & FINANCIALS | ENGAGEMENT METRICS                          */}
-          {/* ===================================================================== */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 items-stretch">
-            {/* Revenue Dashboard Card */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[410px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15] sm:p-6">
+          {/* 4. REVENUE & ENGAGEMENT */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 items-stretch">
+            {/* Revenue */}
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/20 ring-1 ring-emerald-500/30">
-                        <DollarSign className="h-5 w-5 text-emerald-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/20 ring-1 ring-emerald-500/30">
+                        <DollarSign className="h-4 w-4 text-emerald-400" />
                       </div>
                       <div>
-                        <h2 className="text-base font-extrabold text-white">Revenue &amp; Treasury Analytics</h2>
-                        <p className="text-xs text-gray-400">Official entry cash flows &amp; prize collections</p>
+                        <h2 className="text-sm font-bold text-white">Revenue</h2>
+                        <p className="text-[10px] text-gray-400">Entry fees &amp; cash flows</p>
                       </div>
                     </div>
-
-                    {/* Interactive Revenue Tab Switcher */}
-                    <div className="flex items-center gap-1 rounded-xl bg-black/40 p-1 ring-1 ring-white/10 text-xs">
+                    <div className="flex items-center gap-1 rounded-xl bg-black/40 p-0.5 ring-1 ring-white/10 text-xs">
                       <button
                         onClick={() => setRevenueTab("season")}
-                        className={`rounded-lg px-2.5 py-1 font-bold transition-colors ${revenueTab === "season" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-white"}`}
+                        className={`rounded-lg px-2 py-0.5 font-bold transition-colors min-h-[28px] ${
+                          revenueTab === "season" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-white"
+                        }`}
                       >
-                        By Season
+                        Season
                       </button>
                       <button
                         onClick={() => setRevenueTab("monthly")}
-                        className={`rounded-lg px-2.5 py-1 font-bold transition-colors ${revenueTab === "monthly" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-white"}`}
+                        className={`rounded-lg px-2 py-0.5 font-bold transition-colors min-h-[28px] ${
+                          revenueTab === "monthly" ? "bg-emerald-600 text-white" : "text-gray-400 hover:text-white"
+                        }`}
                       >
-                        Monthly
+                        Month
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center">
-                      <p className="font-mono text-lg font-black text-white sm:text-xl">
-                        KES {(revenue?.summary.totalRevenue || 0).toLocaleString()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Gross Treasury</p>
+                  <div className={`grid ${isMobile ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4"} gap-2`}>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-white">KES {(revenue?.summary.totalRevenue || 0).toLocaleString()}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Total</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center">
-                      <p className="font-mono text-lg font-black text-emerald-400 sm:text-xl">
-                        {(revenue?.summary.paidEntries || 0).toLocaleString()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Paid Entries</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-emerald-400">{(revenue?.summary.paidEntries || 0)}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Paid</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center">
-                      <p className="font-mono text-lg font-black text-amber-400 sm:text-xl">
-                        {(revenue?.summary.pendingEntries || 0).toLocaleString()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Pending</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-amber-400">{(revenue?.summary.pendingEntries || 0)}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Pending</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center">
-                      <p className="font-mono text-lg font-black text-purple-400 sm:text-xl">
-                        KES {(revenue?.summary.averagePerEntry || 0).toLocaleString()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Avg/Entry</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-purple-400">KES {(revenue?.summary.averagePerEntry || 0).toLocaleString()}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Avg</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Revenue Interactive Bar Chart */}
-                {revenueTab === "season" && revenue?.revenueBySeason && revenue.revenueBySeason.length > 0 ? (
-                  <div className="mt-6 border-t border-white/[0.06] pt-4">
-                    <div className="mb-3 flex items-center justify-between text-xs font-bold text-gray-300">
-                      <span>Top Season Yield Distribution</span>
-                      <span className="text-emerald-400">Collection Rate: {revenue.summary.completionRate || 92}%</span>
-                    </div>
-                    <div className="flex items-end gap-3 h-24 pt-2">
-                      {revenue.revenueBySeason.slice(0, 5).map((season, i) => {
-                        const max = Math.max(...revenue.revenueBySeason.map((s) => s.total), 1);
-                        const height = Math.max(16, Math.round((season.total / max) * 75));
-                        return (
-                          <div key={i} className="group/bar flex-1 flex flex-col items-center gap-1.5">
-                            <span className="font-mono text-[10px] font-extrabold text-white opacity-0 transition-opacity duration-200 group-hover/bar:opacity-100">
-                              {(season.total / 1000).toFixed(1)}k
-                            </span>
-                            <div
-                              className="w-full rounded-t-lg bg-gradient-to-t from-emerald-600 via-emerald-500 to-teal-400 shadow-md transition-all duration-300 group-hover/bar:brightness-125 group-hover/bar:scale-105"
-                              style={{ height: `${height}px` }}
-                              title={`${season.name}: KES ${season.total.toLocaleString()} (${season.paid} paid)`}
-                            />
-                            <p className="w-full truncate text-center text-[10px] font-bold text-gray-400">
-                              {season.name.substring(0, 8)}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div className="mt-3 border-t border-white/[0.06] pt-3">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-gray-300 mb-2">
+                    <span>Distribution</span>
+                    <span className="text-emerald-400">{revenue?.summary.completionRate || 0}% collected</span>
                   </div>
-                ) : revenueTab === "monthly" && revenue?.monthlyRevenue && revenue.monthlyRevenue.length > 0 ? (
-                  <div className="mt-6 border-t border-white/[0.06] pt-4">
-                    <div className="mb-3 flex items-center justify-between text-xs font-bold text-gray-300">
-                      <span>Monthly Revenue Velocity Curve</span>
-                      <span className="text-emerald-400">Last 6 Months</span>
-                    </div>
-                    <div className="flex items-end gap-3 h-24 pt-2">
-                      {revenue.monthlyRevenue.slice(0, 6).map((item, i) => {
-                        const max = Math.max(...revenue.monthlyRevenue.map((m) => m.revenue), 1);
-                        const height = Math.max(16, Math.round((item.revenue / max) * 75));
-                        return (
-                          <div key={i} className="group/bar flex-1 flex flex-col items-center gap-1.5">
-                            <span className="font-mono text-[10px] font-extrabold text-white opacity-0 transition-opacity duration-200 group-hover/bar:opacity-100">
-                              {(item.revenue / 1000).toFixed(0)}k
-                            </span>
-                            <div
-                              className="w-full rounded-t-lg bg-gradient-to-t from-teal-600 via-cyan-500 to-blue-400 shadow-md transition-all duration-300 group-hover/bar:brightness-125 group-hover/bar:scale-105"
-                              style={{ height: `${height}px` }}
-                            />
-                            <p className="w-full truncate text-center text-[10px] font-bold text-gray-400">
-                              {item.month}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-6 flex flex-col items-center justify-center border-t border-white/[0.06] py-6 text-center">
-                    <DollarSign className="h-8 w-8 text-gray-600" />
-                    <p className="mt-2 text-sm font-bold text-white">No Revenue Records Found</p>
-                    <p className="text-xs text-gray-400">Transactions and entry yields will display once logged</p>
-                  </div>
-                )}
+                  <RevenueChart data={revenue} tab={revenueTab} />
+                </div>
               </div>
-            </motion.div>
+            </div>
 
-            {/* Engagement Metrics Card */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[410px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15] sm:p-6">
+            {/* Engagement */}
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 ring-1 ring-purple-500/30">
-                        <Users className="h-5 w-5 text-purple-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-500/20 ring-1 ring-purple-500/30">
+                        <Users className="h-4 w-4 text-purple-400" />
                       </div>
                       <div>
-                        <h2 className="text-base font-extrabold text-white">Player Engagement &amp; Retention</h2>
-                        <p className="text-xs text-gray-400">Active athlete telemetry &amp; concurrency pulses</p>
+                        <h2 className="text-sm font-bold text-white">Engagement</h2>
+                        <p className="text-[10px] text-gray-400">Active players</p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/15 px-3 py-1 text-xs font-bold text-purple-300">
-                      <Activity className="h-3.5 w-3.5 animate-pulse" />
-                      {engagement?.engagementRate || 88}% Active Rate
+                    <span className="rounded-full border border-purple-500/30 bg-purple-500/15 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+                      {engagement?.engagementRate || 0}%
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center">
-                      <p className="font-mono text-lg font-black text-cyan-400 sm:text-xl">
-                        {(engagement?.active.today || 0).toLocaleString()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">Today Active</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-cyan-400">{(engagement?.active.today || 0)}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Today</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center">
-                      <p className="font-mono text-lg font-black text-indigo-400 sm:text-xl">
-                        {(engagement?.active.week || 0).toLocaleString()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">7-Day Active</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-indigo-400">{(engagement?.active.week || 0)}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">7-Day</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 text-center">
-                      <p className="font-mono text-lg font-black text-purple-400 sm:text-xl">
-                        {(engagement?.active.month || 0).toLocaleString()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">30-Day Active</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-purple-400">{(engagement?.active.month || 0)}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">30-Day</p>
                     </div>
                   </div>
                 </div>
 
-                {/* 7-Day Activity Mini Bar Chart */}
-                {engagement?.dailyActivity && engagement.dailyActivity.length > 0 ? (
-                  <div className="mt-6 border-t border-white/[0.06] pt-4">
-                    <div className="mb-3 flex items-center justify-between text-xs font-bold text-gray-300">
-                      <span>7-Day Concurrency &amp; Activity Pulse</span>
-                      <span className="text-indigo-400 font-bold">Daily Peak Telemetry</span>
-                    </div>
-                    <div className="flex items-end gap-2.5 h-24 pt-2">
-                      {engagement.dailyActivity.map((day, i) => {
-                        const max = Math.max(...engagement.dailyActivity.map((d) => d.activePlayers), 1);
-                        const height = Math.max(16, Math.round((day.activePlayers / max) * 75));
-                        const isPeak = day.activePlayers === max;
-                        return (
-                          <div key={i} className="group/bar flex-1 flex flex-col items-center gap-1.5">
-                            <span className="font-mono text-[10px] font-extrabold text-white opacity-0 transition-opacity duration-200 group-hover/bar:opacity-100">
-                              {day.activePlayers}
-                            </span>
-                            <div
-                              className={`w-full rounded-t-lg transition-all duration-300 group-hover/bar:brightness-125 group-hover/bar:scale-105 ${
-                                isPeak
-                                  ? "bg-gradient-to-t from-pink-600 via-purple-500 to-indigo-400 shadow-lg shadow-purple-500/50"
-                                  : "bg-gradient-to-t from-indigo-600 via-indigo-500 to-purple-400 shadow-md"
-                              }`}
-                              style={{ height: `${height}px` }}
-                              title={`${day.date}: ${day.activePlayers} players ${isPeak ? "(Weekly Peak 🔥)" : ""}`}
-                            />
-                            <p className="w-full truncate text-center text-[10px] font-bold text-gray-400">
-                              {day.date.split(" ")[0] || `D${i + 1}`}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div className="mt-3 border-t border-white/[0.06] pt-3">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-gray-300 mb-2">
+                    <span>{isMobile ? "5-Day Activity" : "7-Day Activity"}</span>
+                    <span className="text-indigo-400">Daily peak</span>
                   </div>
-                ) : (
-                  <div className="mt-6 flex flex-col items-center justify-center border-t border-white/[0.06] py-6 text-center">
-                    <Activity className="h-8 w-8 text-gray-600" />
-                    <p className="mt-2 text-sm font-bold text-white">No Concurrency Telemetry Yet</p>
-                    <p className="text-xs text-gray-400">Concurrency curves will populate automatically once matches begin</p>
-                  </div>
-                )}
+                  <EngagementChart data={engagement} />
+                </div>
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          {/* ===================================================================== */}
-          {/* 5. TOURNAMENT HEALTH | SEASON COMPARE | UPCOMING EVENTS               */}
-          {/* ===================================================================== */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 items-stretch">
+          {/* 5. TOURNAMENT | SEASON | UPCOMING */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 items-stretch">
             {/* Tournament Health */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[340px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[280px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/20 ring-1 ring-orange-500/30">
-                        <Trophy className="h-4 w-4 text-orange-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500/20 ring-1 ring-orange-500/30">
+                        <Trophy className="h-3.5 w-3.5 text-orange-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Tournament Health</h2>
+                      <h2 className="text-sm font-bold text-white">Tournaments</h2>
                     </div>
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-black shadow-sm ${
-                        (tournamentHealth?.summary.healthStatus || "healthy").toLowerCase() === "healthy"
-                          ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
-                          : "border-amber-500/40 bg-amber-500/20 text-amber-300"
-                      }`}
-                    >
-                      {(tournamentHealth?.summary.healthStatus || "HEALTHY").toUpperCase()}
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                      tournamentHealth?.summary.healthStatus === "healthy"
+                        ? "border-emerald-500/30 bg-emerald-500/20 text-emerald-300"
+                        : "border-amber-500/30 bg-amber-500/20 text-amber-300"
+                    }`}>
+                      {tournamentHealth?.summary.healthStatus || "Healthy"}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center">
-                      <p className="font-mono text-xl font-black text-white">
-                        {tournamentHealth?.summary.activeTournaments || 4}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase text-gray-400">Active Brackets</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-white">{tournamentHealth?.summary.activeTournaments || 0}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Active</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center">
-                      <p className="font-mono text-xl font-black text-emerald-400">
-                        {tournamentHealth?.summary.completionRate || 96}%
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase text-gray-400">Completion Rate</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-emerald-400">{tournamentHealth?.summary.completionRate || 0}%</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Complete</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center">
-                      <p className="font-mono text-xl font-black text-amber-400">
-                        {tournamentHealth?.summary.pendingTournaments || 1}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase text-gray-400">Pending Start</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-amber-400">{tournamentHealth?.summary.pendingTournaments || 0}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Pending</p>
                     </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-center">
-                      <p className="font-mono text-xl font-black text-purple-400">
-                        {tournamentHealth?.summary.totalTournaments || 12}
-                      </p>
-                      <p className="mt-0.5 text-[11px] font-bold uppercase text-gray-400">Total Managed</p>
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                      <p className="font-mono text-sm font-black text-purple-400">{tournamentHealth?.summary.totalTournaments || 0}</p>
+                      <p className="text-[9px] font-bold uppercase text-gray-400">Total</p>
                     </div>
                   </div>
                 </div>
 
-                <Link
-                  href="/admin/tournaments"
-                  className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-500/30 text-xs font-bold uppercase tracking-wider text-orange-300 transition-all hover:bg-orange-500/30 hover:text-white"
-                >
-                  Inspect Bracket Telemetry
-                  <ChevronRight className="h-4 w-4" />
+                <Link href="/admin/tournaments" className="mt-3 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-500/30 text-[10px] font-bold uppercase tracking-wider text-orange-300 transition-all hover:bg-orange-500/30 hover:text-white">
+                  View Brackets
+                  <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </div>
 
             {/* Season Compare */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[340px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[280px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/20 ring-1 ring-cyan-500/30">
-                        <Calendar className="h-4 w-4 text-cyan-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/20 ring-1 ring-cyan-500/30">
+                        <Calendar className="h-3.5 w-3.5 text-cyan-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Season Compare</h2>
+                      <h2 className="text-sm font-bold text-white">Seasons</h2>
                     </div>
-                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-bold text-cyan-300">
-                      YoY Growth
+                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                      YoY
                     </span>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-                      <span className="text-xs font-semibold text-gray-300">Active Live Seasons</span>
-                      <span className="font-mono text-sm font-black text-white">{overview?.stats.activeSeasons || 2} Live</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Active</span>
+                      <span className="font-mono text-xs font-black text-white">{overview?.stats.activeSeasons || 0}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-                      <span className="text-xs font-semibold text-gray-300">Total Archival Seasons</span>
-                      <span className="font-mono text-sm font-black text-white">{overview?.stats.totalSeasons || 8} Logged</span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Total</span>
+                      <span className="font-mono text-xs font-black text-white">{overview?.stats.totalSeasons || 0}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-                      <span className="text-xs font-semibold text-gray-300">Athlete Expansion Rate</span>
-                      <span className="flex items-center gap-1 font-mono text-sm font-black text-emerald-400">
-                        <TrendingUp className="h-4 w-4" />+{overview?.growth.playerGrowthRate || 24}%
-                      </span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Player Growth</span>
+                      <span className="font-mono text-xs font-black text-emerald-400">+{overview?.growth.playerGrowthRate || 0}%</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-                      <span className="text-xs font-semibold text-gray-300">Match Participation Velocity</span>
-                      <span className="flex items-center gap-1 font-mono text-sm font-black text-emerald-400">
-                        <TrendingUp className="h-4 w-4" />+{overview?.growth.resultGrowthRate || 18}%
-                      </span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Match Growth</span>
+                      <span className="font-mono text-xs font-black text-emerald-400">+{overview?.growth.resultGrowthRate || 0}%</span>
                     </div>
                   </div>
                 </div>
 
-                <Link
-                  href="/admin/seasons"
-                  className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-xs font-bold uppercase tracking-wider text-cyan-300 transition-all hover:bg-cyan-500/30 hover:text-white"
-                >
-                  Examine Season Archives
-                  <ChevronRight className="h-4 w-4" />
+                <Link href="/admin/seasons" className="mt-3 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-[10px] font-bold uppercase tracking-wider text-cyan-300 transition-all hover:bg-cyan-500/30 hover:text-white">
+                  Manage Seasons
+                  <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </div>
 
             {/* Upcoming Events */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[340px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[280px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-500/20 ring-1 ring-pink-500/30">
-                        <Clock className="h-4 w-4 text-pink-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-500/20 ring-1 ring-pink-500/30">
+                        <Clock className="h-3.5 w-3.5 text-pink-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Upcoming Deadlines</h2>
+                      <h2 className="text-sm font-bold text-white">Upcoming</h2>
                     </div>
-                    <span className="rounded-full border border-pink-500/30 bg-pink-500/15 px-2.5 py-1 text-[11px] font-bold text-pink-300">
-                      3 Critical Dates
+                    <span className="rounded-full border border-pink-500/30 bg-pink-500/15 px-2 py-0.5 text-[10px] font-bold text-pink-300">
+                      3
                     </span>
                   </div>
 
-                  <div className="space-y-3">
-                    {/* Season End */}
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 transition-colors hover:bg-white/[0.07]">
-                      <div className="flex items-center gap-3">
-                        <div className="h-2.5 w-2.5 rounded-full bg-rose-400 animate-pulse shadow-sm shadow-rose-500" />
-                        <div>
-                          <p className="text-xs font-bold text-white">Active Season Finale</p>
-                          <p className="text-[11px] text-gray-400">Division 1 championship cutoff</p>
-                        </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full bg-rose-400" />
+                        <span className="text-[10px] font-bold text-white">Season Finale</span>
                       </div>
-                      <span className="rounded-lg bg-rose-500/20 px-2.5 py-1 text-xs font-black text-rose-300">
-                        In 12 days
-                      </span>
+                      <span className="rounded-lg bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-black text-rose-300">12 days</span>
                     </div>
-
-                    {/* Fixture Generation */}
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 transition-colors hover:bg-white/[0.07]">
-                      <div className="flex items-center gap-3">
-                        <div className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse shadow-sm shadow-amber-500" />
-                        <div>
-                          <p className="text-xs font-bold text-white">Automated Fixture Generation</p>
-                          <p className="text-[11px] text-gray-400">Round 8 Swiss pairing engine</p>
-                        </div>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full bg-amber-400" />
+                        <span className="text-[10px] font-bold text-white">Fixtures</span>
                       </div>
-                      <span className="rounded-lg bg-amber-500/20 px-2.5 py-1 text-xs font-black text-amber-300">
-                        Tomorrow
-                      </span>
+                      <span className="rounded-lg bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black text-amber-300">Tomorrow</span>
                     </div>
-
-                    {/* Tournament Deadlines */}
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5 transition-colors hover:bg-white/[0.07]">
-                      <div className="flex items-center gap-3">
-                        <div className="h-2.5 w-2.5 rounded-full bg-blue-400 animate-pulse shadow-sm shadow-blue-500" />
-                        <div>
-                          <p className="text-xs font-bold text-white">Pro Roster Lock Deadline</p>
-                          <p className="text-[11px] text-gray-400">Nexus Invitational entries</p>
-                        </div>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full bg-blue-400" />
+                        <span className="text-[10px] font-bold text-white">Registrations</span>
                       </div>
-                      <span className="rounded-lg bg-blue-500/20 px-2.5 py-1 text-xs font-black text-blue-300">
-                        3 days left
-                      </span>
+                      <span className="rounded-lg bg-blue-500/20 px-1.5 py-0.5 text-[9px] font-black text-blue-300">3 days</span>
                     </div>
                   </div>
                 </div>
 
-                <Link
-                  href="/admin/events"
-                  className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-pink-500/20 to-rose-500/20 border border-pink-500/30 text-xs font-bold uppercase tracking-wider text-pink-300 transition-all hover:bg-pink-500/30 hover:text-white"
-                >
-                  Manage Event Calendar
-                  <ChevronRight className="h-4 w-4" />
+                <Link href="/admin/events" className="mt-3 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-pink-500/20 to-rose-500/20 border border-pink-500/30 text-[10px] font-bold uppercase tracking-wider text-pink-300 transition-all hover:bg-pink-500/30 hover:text-white">
+                  View Calendar
+                  <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          {/* ===================================================================== */}
-          {/* 6. MODERATION QUEUE | TOP CONTRIBUTORS | SQUAD OVERVIEW               */}
-          {/* ===================================================================== */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 items-stretch">
-            {/* Moderation Queue */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[340px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+          {/* 6. MODERATION | CONTRIBUTORS | SQUADS */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 items-stretch">
+            {/* Moderation */}
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[280px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/20 ring-1 ring-rose-500/30">
-                        <Flag className="h-4 w-4 text-rose-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-500/20 ring-1 ring-rose-500/30">
+                        <Flag className="h-3.5 w-3.5 text-rose-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Moderation Queue</h2>
+                      <h2 className="text-sm font-bold text-white">Moderation</h2>
                     </div>
-                    <span className="rounded-full border border-rose-500/30 bg-rose-500/20 px-2.5 py-1 text-xs font-bold text-rose-300 shadow-sm">
-                      {overview?.stats.pendingReports || 0} Pending
+                    <span className="rounded-full border border-rose-500/30 bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">
+                      {overview?.stats.pendingReports || 0}
                     </span>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">Unresolved Reports</span>
-                      <span className="rounded-md bg-rose-500/20 px-2.5 py-0.5 font-mono text-sm font-black text-rose-300">
-                        {overview?.stats.pendingReports || 0}
-                      </span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Pending Reports</span>
+                      <span className="font-mono text-xs font-black text-rose-300">{overview?.stats.pendingReports || 0}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">Total Lifetime Reports Logged</span>
-                      <span className="font-mono text-sm font-black text-white">{overview?.stats.totalReports || 14}</span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Total Lifetime</span>
+                      <span className="font-mono text-xs font-black text-white">{overview?.stats.totalReports || 0}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">SLA Resolution Target</span>
-                      <span className="font-mono text-sm font-black text-emerald-400">&lt; 1.2 Hours</span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">SLA</span>
+                      <span className="font-mono text-xs font-black text-emerald-400">&lt; 2h</span>
                     </div>
                   </div>
                 </div>
 
-                <Link
-                  href="/admin/moderation"
-                  className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600/20 to-pink-600/20 border border-rose-500/30 text-xs font-bold uppercase tracking-wider text-rose-300 transition-all hover:bg-rose-600/30 hover:text-white"
-                >
-                  Review Moderation Queue
-                  <ChevronRight className="h-4 w-4" />
+                <Link href="/admin/moderation" className="mt-3 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600/20 to-pink-600/20 border border-rose-500/30 text-[10px] font-bold uppercase tracking-wider text-rose-300 transition-all hover:bg-rose-600/30 hover:text-white">
+                  Review Queue
+                  <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </div>
 
             {/* Top Contributors */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[340px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[280px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-yellow-500/20 ring-1 ring-yellow-500/30">
-                        <Crown className="h-4 w-4 text-yellow-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-yellow-500/20 ring-1 ring-yellow-500/30">
+                        <Crown className="h-3.5 w-3.5 text-yellow-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Top Roster Athletes</h2>
+                      <h2 className="text-sm font-bold text-white">Top Players</h2>
                     </div>
-                    <span className="rounded-full border border-yellow-500/30 bg-yellow-500/15 px-2.5 py-1 text-[11px] font-bold text-yellow-300">
-                      Season Leaders
+                    <span className="rounded-full border border-yellow-500/30 bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
+                      Leaders
                     </span>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {topContributors.length > 0 ? (
-                      topContributors.slice(0, 3).map((player, index) => (
-                        <div key={player.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.07]">
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg font-mono text-xs font-black ring-1 ${
-                                index === 0
-                                  ? "bg-yellow-500/20 text-yellow-400 ring-yellow-500/30"
-                                  : index === 1
-                                  ? "bg-gray-400/20 text-gray-300 ring-gray-400/30"
-                                  : "bg-amber-600/20 text-amber-500 ring-amber-600/30"
-                              }`}
-                            >
+                      topContributors.slice(0, isMobile ? 2 : 3).map((player, index) => (
+                        <div key={player.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`flex h-6 w-6 items-center justify-center rounded-lg font-mono text-[10px] font-black ring-1 ${
+                              index === 0 ? "bg-yellow-500/20 text-yellow-400 ring-yellow-500/30" :
+                              index === 1 ? "bg-gray-400/20 text-gray-300 ring-gray-400/30" :
+                              "bg-amber-600/20 text-amber-500 ring-amber-600/30"
+                            }`}>
                               #{index + 1}
                             </span>
                             <div>
-                              <p className="text-xs font-bold text-white">{player.name}</p>
-                              <p className="text-[10px] text-gray-400">@{player.username}</p>
+                              <p className="text-[10px] font-bold text-white">{player.name}</p>
+                              <p className="text-[9px] text-gray-400">@{player.username}</p>
                             </div>
                           </div>
-                          <span className="font-mono text-xs font-extrabold text-emerald-400">{player.wins} Wins</span>
+                          <span className="font-mono text-[10px] font-extrabold text-emerald-400">{player.wins}W</span>
                         </div>
                       ))
                     ) : (
-                      <div className="flex h-[180px] flex-col items-center justify-center text-center">
-                        <Trophy className="h-8 w-8 text-gray-600" />
-                        <p className="mt-2 text-sm font-bold text-white">No data available</p>
-                        <p className="text-xs text-gray-400">Players will appear as they compete</p>
+                      <div className="flex h-[120px] flex-col items-center justify-center text-center">
+                        <Trophy className="h-6 w-6 text-gray-600" />
+                        <p className="mt-1 text-xs font-bold text-white">No data</p>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
 
-            {/* Squad Overview */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[340px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            {/* Squads */}
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[280px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/20 ring-1 ring-teal-500/30">
-                        <Shield className="h-4 w-4 text-teal-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-500/20 ring-1 ring-teal-500/30">
+                        <Shield className="h-3.5 w-3.5 text-teal-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Squad Overview</h2>
+                      <h2 className="text-sm font-bold text-white">Squads</h2>
                     </div>
-                    <span className="rounded-full border border-teal-500/30 bg-teal-500/15 px-2.5 py-1 text-[11px] font-bold text-teal-300">
-                      {squadData?.total || overview?.stats.totalSquads || 18} Squads
+                    <span className="rounded-full border border-teal-500/30 bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold text-teal-300">
+                      {squadData?.total || overview?.stats.totalSquads || 0}
                     </span>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">Total Registered Squads</span>
-                      <span className="font-mono text-sm font-black text-white">{squadData?.total || overview?.stats.totalSquads || 18} Active</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Total Squads</span>
+                      <span className="font-mono text-xs font-black text-white">{squadData?.total || overview?.stats.totalSquads || 0}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">Verified Competitive Rosters</span>
-                      <span className="font-mono text-sm font-black text-emerald-400">
-                        {squadData?.verified || Math.round((overview?.stats.totalSquads || 18) * 0.78)} Verified
-                      </span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Verified</span>
+                      <span className="font-mono text-xs font-black text-emerald-400">{squadData?.verified || 0}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">Average Roster Density</span>
-                      <span className="font-mono text-sm font-black text-purple-400">
-                        {squadData?.avgMembers || 4.6} Athletes/Squad
-                      </span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Avg Members</span>
+                      <span className="font-mono text-xs font-black text-purple-400">{squadData?.avgMembers || 0}</span>
                     </div>
                   </div>
                 </div>
 
-                <Link
-                  href="/admin/squads"
-                  className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500/20 to-cyan-500/20 border border-teal-500/30 text-xs font-bold uppercase tracking-wider text-teal-300 transition-all hover:bg-teal-500/30 hover:text-white"
-                >
-                  Manage Roster Database
-                  <ChevronRight className="h-4 w-4" />
+                <Link href="/admin/squads" className="mt-3 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-teal-500/20 to-cyan-500/20 border border-teal-500/30 text-[10px] font-bold uppercase tracking-wider text-teal-300 transition-all hover:bg-teal-500/30 hover:text-white">
+                  Manage Rosters
+                  <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          {/* ===================================================================== */}
-          {/* 7. RECENT ACTIVITY | BACKUP STATUS | VERIFICATION QUEUE               */}
-          {/* ===================================================================== */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 items-stretch">
-            {/* Recent Activity */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[360px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+          {/* 7. RECENT ACTIVITY | BACKUP | VERIFICATION */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 items-stretch">
+            {/* Recent Activity - Simple List */}
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/20 ring-1 ring-purple-500/30">
-                        <Activity className="h-4 w-4 text-purple-400 animate-pulse" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/20 ring-1 ring-purple-500/30">
+                        <Activity className="h-3.5 w-3.5 text-purple-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Live Activity Feed</h2>
+                      <h2 className="text-sm font-bold text-white">Activity</h2>
                     </div>
-                    <span className="rounded-full border border-purple-500/30 bg-purple-500/15 px-2.5 py-1 text-[11px] font-bold text-purple-300">
-                      Streaming
+                    <span className="rounded-full border border-purple-500/30 bg-purple-500/15 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+                      Live
                     </span>
                   </div>
 
-                  <div className="max-h-[250px] space-y-2 overflow-y-auto pr-1">
-                    {recentActivity.length === 0 ? (
-                      <div className="flex h-[180px] flex-col items-center justify-center text-center">
-                        <Activity className="h-8 w-8 text-gray-600" />
-                        <p className="mt-2 text-sm font-bold text-white">No activity logged</p>
-                        <p className="text-xs text-gray-400">Events will populate automatically</p>
-                      </div>
-                    ) : (
-                      recentActivity.slice(0, 5).map((activity) => (
-                        <ActivityItem key={activity.id} activity={activity} />
-                      ))
-                    )}
-                  </div>
+                  <ActivityList activities={recentActivity} />
                 </div>
               </div>
-            </motion.div>
+            </div>
 
             {/* Backup Status */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[360px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/20 ring-1 ring-blue-500/30">
-                        <Database className="h-4 w-4 text-blue-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/20 ring-1 ring-blue-500/30">
+                        <Database className="h-3.5 w-3.5 text-blue-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Database Backups</h2>
+                      <h2 className="text-sm font-bold text-white">Backups</h2>
                     </div>
-                    <span className="rounded-full border border-blue-500/30 bg-blue-500/15 px-2.5 py-1 text-[11px] font-bold text-blue-300">
-                      Auto-Schedule
+                    <span className="rounded-full border border-blue-500/30 bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold text-blue-300">
+                      Auto
                     </span>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">Last Snapshot Check</span>
-                      <span className="font-mono text-sm font-black text-emerald-400">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Last Backup</span>
+                      <span className="font-mono text-xs font-black text-emerald-400">
                         {backupStatus?.lastBackup ? formatBackupTime(backupStatus.lastBackup) : "Never"}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">Compressed Snapshot Size</span>
-                      <span className="font-mono text-sm font-black text-white">{backupStatus?.size || "28.4 MB"} Compressed</span>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Size</span>
+                      <span className="font-mono text-xs font-black text-white">{backupStatus?.size || "0 MB"}</span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5">
-                      <span className="text-xs font-semibold text-gray-300">SHA-256 Integrity Verification</span>
-                      <span className={`flex items-center gap-1.5 font-mono text-sm font-black ${backupStatus?.status === "success" ? "text-emerald-400" : "text-amber-400"}`}>
-                        {backupStatus?.status === "success" ? (
-                          <CheckCircle className="h-4 w-4" />
-                        ) : (
-                          <AlertTriangle className="h-4 w-4" />
-                        )}
-                        {backupStatus?.status === "success" ? "100% Verified" : "Operational"}
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2">
+                      <span className="text-[10px] font-semibold text-gray-300">Status</span>
+                      <span className={`font-mono text-xs font-black ${backupStatus?.status === "success" ? "text-emerald-400" : "text-amber-400"}`}>
+                        {backupStatus?.status === "success" ? "✅ Verified" : "⏳ Pending"}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <Link
-                  href="/admin/settings/backup"
-                  className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-bold uppercase tracking-wider text-blue-300 transition-all hover:bg-blue-500/30 hover:text-white"
-                >
-                  <Database className="h-4 w-4" />
-                  Trigger Manual Snapshot
-                  <ChevronRight className="h-4 w-4" />
+                <Link href="/admin/settings/backup" className="mt-3 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-[10px] font-bold uppercase tracking-wider text-blue-300 transition-all hover:bg-blue-500/30 hover:text-white">
+                  <Database className="h-3 w-3" />
+                  Manage Backups
+                  <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </div>
 
             {/* Verification Queue */}
-            <motion.div variants={itemVariants} className="flex flex-col">
-              <div className="flex h-full min-h-[360px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.02] to-transparent p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-300 hover:border-white/[0.15]">
+            <div className="flex flex-col">
+              <div className="flex h-full min-h-[300px] flex-col justify-between rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-150 hover:border-white/[0.15] sm:p-5">
                 <div>
-                  <div className="mb-4 flex items-center justify-between border-b border-white/[0.08] pb-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 ring-1 ring-emerald-500/30">
-                        <UserPlus className="h-4 w-4 text-emerald-400" />
+                  <div className="mb-3 flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 ring-1 ring-emerald-500/30">
+                        <UserPlus className="h-3.5 w-3.5 text-emerald-400" />
                       </div>
-                      <h2 className="text-base font-extrabold text-white">Athlete Verification</h2>
+                      <h2 className="text-sm font-bold text-white">Verification</h2>
                     </div>
-                    <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-300 shadow-sm">
-                      {verificationQueue.length} Pending
+                    <span className="rounded-full border border-amber-500/30 bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                      {verificationQueue.length}
                     </span>
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     {verificationQueue.length > 0 ? (
-                      verificationQueue.slice(0, 3).map((item) => {
-                        const initials = item.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()
-                          .slice(0, 2);
-                        const colors = ["from-indigo-500 to-purple-500", "from-pink-500 to-rose-500", "from-emerald-500 to-teal-500"];
-                        const colorIndex = verificationQueue.indexOf(item) % colors.length;
-
+                      verificationQueue.slice(0, isMobile ? 2 : 3).map((item) => {
+                        const initials = item.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
                         return (
-                          <div key={item.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.07]">
-                            <div className="flex items-center gap-2.5">
-                              <div className={`flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br ${colors[colorIndex]} font-mono text-xs font-black text-white shadow-md`}>
+                          <div key={item.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-2 transition-colors hover:bg-white/[0.06]">
+                            <div className="flex items-center gap-2">
+                              <div className={`flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 font-mono text-[10px] font-black text-white shadow-md`}>
                                 {initials}
                               </div>
                               <div>
-                                <p className="text-xs font-bold text-white">{item.name}</p>
-                                <p className="text-[10px] text-gray-400">@{item.username}</p>
+                                <p className="text-[10px] font-bold text-white">{item.name}</p>
+                                <p className="text-[9px] text-gray-400">@{item.username}</p>
                               </div>
                             </div>
-                            <span className="rounded bg-white/5 px-2 py-0.5 font-mono text-[10px] font-bold text-gray-400">
+                            <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[9px] font-bold text-gray-400">
                               {item.submittedAt ? formatBackupTime(item.submittedAt) : "Pending"}
                             </span>
                           </div>
                         );
                       })
                     ) : (
-                      <div className="flex h-[160px] flex-col items-center justify-center text-center">
-                        <CheckCircle className="h-8 w-8 text-emerald-400" />
-                        <p className="mt-2 text-sm font-bold text-white">All Athletes Verified</p>
-                        <p className="text-xs text-gray-400">No pending identity reviews inside queue</p>
+                      <div className="flex h-[120px] flex-col items-center justify-center text-center">
+                        <CheckCircle className="h-6 w-6 text-emerald-400" />
+                        <p className="mt-1 text-xs font-bold text-white">All Verified</p>
+                        <p className="text-[10px] text-gray-400">No pending verifications</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <Link
-                  href="/admin/players"
-                  className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-xs font-bold uppercase tracking-wider text-emerald-300 transition-all hover:bg-emerald-500/30 hover:text-white"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Review Verification Queue
-                  <ChevronRight className="h-4 w-4" />
+                <Link href="/admin/players" className="mt-3 flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider text-emerald-300 transition-all hover:bg-emerald-500/30 hover:text-white">
+                  <UserPlus className="h-3 w-3" />
+                  Review Queue
+                  <ChevronRight className="h-3 w-3" />
                 </Link>
               </div>
-            </motion.div>
+            </div>
           </div>
 
-          {/* ===================================================================== */}
-          {/* 8. FOOTER METRICS & SYSTEM TELEMETRY                                  */}
-          {/* ===================================================================== */}
-          <motion.div
-            variants={itemVariants}
-            className="mt-8 rounded-3xl border border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-white/[0.01] px-6 py-6 backdrop-blur-2xl shadow-xl sm:px-8"
-          >
-            <div className="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 ring-1 ring-indigo-500/30">
-                  <Terminal className="h-4 w-4 text-indigo-400" />
-                </div>
-                <p className="text-xs font-medium text-gray-400 sm:text-sm">
-                  © {new Date().getFullYear()} Nexus Esports League. Telemetry streaming live and auto-synced every 60s.
-                  <span className="hidden sm:inline"> • Cyber-Admin Control Hub v3.0 PRO</span>
-                </p>
-              </div>
+          {/* 8. FOOTER */}
+          <div className="mt-6 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-4 backdrop-blur-xl sm:px-6">
+            <div className="flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
+              <p className="text-[10px] font-medium text-gray-400 sm:text-xs">
+                © {new Date().getFullYear()} Nexus Esports League. All data live &amp; auto-refreshed every 30s.
+                <span className="hidden sm:inline"> • Admin Hub v3.0</span>
+              </p>
 
-              <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-extrabold text-gray-300">
-                <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-400 shadow-sm">
-                  <CheckCircle className="h-3.5 w-3.5" />
-                  Telemetry: Operational
+              <div className="flex flex-wrap items-center justify-center gap-2 text-[10px] font-bold text-gray-300">
+                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-400 ring-1 ring-emerald-500/30">
+                  <CheckCircle className="h-3 w-3" />
+                  Operational
                 </span>
-                <span className="flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 font-mono text-blue-400 shadow-sm">
-                  <Database className="h-3.5 w-3.5" />
-                  DB Latency: {overview?.system.queryTime || 12}ms
+                <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 font-mono text-blue-400 ring-1 ring-blue-500/30">
+                  <Database className="h-3 w-3" />
+                  {overview?.system.queryTime || 12}ms
                 </span>
-                <span className="flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 font-mono text-purple-400 shadow-sm">
-                  <Users className="h-3.5 w-3.5" />
-                  Athletes: {overview?.stats.totalPlayers || 0}
+                <span className="flex items-center gap-1 rounded-full bg-purple-500/10 px-2.5 py-1 font-mono text-purple-400 ring-1 ring-purple-500/30">
+                  <Users className="h-3 w-3" />
+                  {overview?.stats.totalPlayers || 0}
                 </span>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
-      </motion.div>
+      </div>
     </>
   );
 }

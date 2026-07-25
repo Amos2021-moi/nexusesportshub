@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Plus,
   Edit,
@@ -65,220 +64,28 @@ const statusOptions = [
 ];
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
-  },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
-
-/* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
-/* -------------------------------------------------------------------------- */
-
-const StatCard = memo(({ stat }: { stat: any }) => (
-  <motion.div
-    variants={statCardVariants}
-    initial="hidden"
-    animate="visible"
-    whileHover="hover"
-    className="will-change-transform"
-  >
-    <div className={`group relative h-full overflow-hidden rounded-2xl border bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-emerald-500/40 ${stat.ring}`}>
-      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-500 group-hover:opacity-70`} />
-      <div className="relative flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className={`text-2xl font-bold ${stat.accent}`}>{stat.value}</p>
-          <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
-        </div>
-        <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 ${stat.accent}`}>
-          <stat.icon className="h-5 w-5" />
-        </span>
-      </div>
-    </div>
-  </motion.div>
-));
-
-StatCard.displayName = "StatCard";
-
-const StatusBadge = memo(({ status }: { status: string }) => {
-  const option = statusOptions.find((s) => s.value === status) || statusOptions[0];
-  const Icon = option.icon;
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${option.color}`}>
-      <Icon className="h-3 w-3" />
-      {option.label}
-    </span>
-  );
-});
-
-StatusBadge.displayName = "StatusBadge";
-
-const SeasonCard = memo(({
-  season,
-  onEdit,
-  onDelete,
-  onUpdateStatus,
-  isDeleting,
-  isUpdating,
-}: {
-  season: Season;
-  onEdit: (season: Season) => void;
-  onDelete: (id: string) => void;
-  onUpdateStatus: (id: string, status: string) => void;
-  isDeleting: string | null;
-  isUpdating: string | null;
-}) => {
-  const progress = getSeasonProgress(season);
-  const statusColor = getStatusColor(season.status);
-
-  return (
-    <motion.div
-      variants={itemVariants}
-      whileHover={{ y: -3 }}
-      transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-emerald-500/40 sm:p-5"
-    >
-      <div className="pointer-events-none absolute -right-12 -top-12 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
-      <div className="relative">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-lg font-semibold text-white sm:text-xl">{season.name}</h2>
-              <StatusBadge status={season.status} />
-              {season.isActive && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-green-400/20 bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-300">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
-                  Active
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-3 text-sm text-gray-400">
-              <span className="flex items-center gap-1.5">
-                <Calendar size={14} className="text-emerald-400" />
-                {formatDate(season.startDate)}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Calendar size={14} className="text-red-400" />
-                {formatDate(season.endDate)}
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-1">
-            <button
-              onClick={() => onEdit(season)}
-              className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-blue-400/20 bg-blue-500/10 text-blue-300 transition-all hover:bg-blue-500/20"
-              title="Edit season"
-            >
-              <Edit size={16} />
-            </button>
-            <button
-              onClick={() => onDelete(season.id)}
-              disabled={isDeleting === season.id}
-              className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-50"
-              title="Delete season"
-            >
-              {isDeleting === season.id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 size={16} />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Progress */}
-        <div className="mt-4">
-          <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="text-gray-500">Season Progress</span>
-            <span className="font-medium text-emerald-300">{progress}%</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-gray-900/70">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.6, ease: "easeOut" }}
-              className={`h-full rounded-full bg-gradient-to-r ${statusColor}`}
-            />
-          </div>
-        </div>
-
-        {/* Status Quick Actions */}
-        <div className="mt-4 flex flex-wrap gap-1.5 border-t border-white/10 pt-4">
-          {statusOptions.map((opt) => {
-            const Icon = opt.icon;
-            const isActive = season.status === opt.value;
-            return (
-              <button
-                key={opt.value}
-                onClick={() => onUpdateStatus(season.id, opt.value)}
-                disabled={isActive || isUpdating === season.id}
-                className={`flex min-h-[32px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                  isActive
-                    ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
-                    : "bg-gray-700/50 text-gray-300 hover:bg-emerald-600/30 hover:text-white"
-                }`}
-              >
-                {isUpdating === season.id && !isActive ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Icon className="h-3 w-3" />
-                )}
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </motion.div>
-  );
-});
-
-SeasonCard.displayName = "SeasonCard";
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
 /*                            Helper Functions                                */
 /* -------------------------------------------------------------------------- */
-
-function getStatusBadge(status: string) {
-  const option = statusOptions.find((s) => s.value === status) || statusOptions[0];
-  const Icon = option.icon;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${option.color}`}
-    >
-      <Icon className="h-3 w-3" />
-      {option.label}
-    </span>
-  );
-}
 
 function getSeasonProgress(season: Season) {
   if (season.status === "ARCHIVED" || season.status === "ENDED") return 100;
@@ -310,46 +117,208 @@ function formatDate(date: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
+/*                           STATIC Background - NO ANIMATIONS               */
 /* -------------------------------------------------------------------------- */
 
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-emerald-950">
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-emerald-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-green-600/15 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-teal-600/15 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.15]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
-    />
-  </div>
-));
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-emerald-950" />
+    );
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-emerald-950">
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-emerald-600/20 blur-3xl" />
+      <div className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-green-600/15 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-teal-600/15 blur-3xl" />
+      <div
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
+    </div>
+  );
+});
 
 DecorBackground.displayName = "DecorBackground";
 
 /* -------------------------------------------------------------------------- */
-/*                            Main Component                                  */
+/*                           Memoized Components                             */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Stat Card ===
+const StatCard = memo(({ stat }: { stat: any }) => {
+  const Icon = stat.icon;
+  return (
+    <div className={`group relative h-full overflow-hidden rounded-2xl border bg-white/5 p-3 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-emerald-500/40 sm:p-4 ${stat.ring}`}>
+      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-300 group-hover:opacity-70`} />
+      <div className="relative flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`text-xl font-bold sm:text-2xl ${stat.accent}`}>{stat.value}</p>
+          <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
+        </div>
+        <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 sm:h-10 sm:w-10 ${stat.accent}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+        </span>
+      </div>
+    </div>
+  );
+});
+
+StatCard.displayName = "StatCard";
+
+// === STATIC Status Badge ===
+const StatusBadge = memo(({ status }: { status: string }) => {
+  const option = statusOptions.find((s) => s.value === status) || statusOptions[0];
+  const Icon = option.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${option.color}`}>
+      <Icon className="h-3 w-3" />
+      {option.label}
+    </span>
+  );
+});
+
+StatusBadge.displayName = "StatusBadge";
+
+// === STATIC Season Card ===
+const SeasonCard = memo(({
+  season,
+  onEdit,
+  onDelete,
+  onUpdateStatus,
+  isDeleting,
+  isUpdating,
+}: {
+  season: Season;
+  onEdit: (season: Season) => void;
+  onDelete: (id: string) => void;
+  onUpdateStatus: (id: string, status: string) => void;
+  isDeleting: string | null;
+  isUpdating: string | null;
+}) => {
+  const isMobile = useIsMobile();
+  const progress = getSeasonProgress(season);
+  const statusColor = getStatusColor(season.status);
+
+  const handleEdit = useCallback(() => onEdit(season), [onEdit, season]);
+  const handleDelete = useCallback(() => onDelete(season.id), [onDelete, season.id]);
+  const handleStatusUpdate = useCallback((status: string) => onUpdateStatus(season.id, status), [onUpdateStatus, season.id]);
+
+  // NO hover effects on mobile
+  const hoverClass = isMobile ? "" : "hover:border-emerald-500/40";
+
+  return (
+    <div className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors duration-150 ${hoverClass} sm:p-5`}>
+      <div className="pointer-events-none absolute -right-12 -top-12 h-28 w-28 rounded-full bg-emerald-500/10 blur-3xl transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="relative">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-lg font-semibold text-white sm:text-xl">{season.name}</h2>
+              <StatusBadge status={season.status} />
+              {season.isActive && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-green-400/20 bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-300">
+                  <span className={`h-1.5 w-1.5 rounded-full bg-green-400 ${isMobile ? "" : "animate-pulse"}`} />
+                  Active
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm text-gray-400">
+              <span className="flex items-center gap-1.5">
+                <Calendar size={14} className="text-emerald-400" />
+                {formatDate(season.startDate)}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Calendar size={14} className="text-red-400" />
+                {formatDate(season.endDate)}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <button
+              onClick={handleEdit}
+              className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-blue-400/20 bg-blue-500/10 text-blue-300 transition-colors duration-150 hover:bg-blue-500/20"
+              title="Edit season"
+            >
+              <Edit size={16} />
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting === season.id}
+              className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-300 transition-colors duration-150 hover:bg-red-500/20 disabled:opacity-50"
+              title="Delete season"
+            >
+              {isDeleting === season.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 size={16} />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Progress - NO animation on mobile */}
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="text-gray-500">Season Progress</span>
+            <span className="font-medium text-emerald-300">{progress}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-gray-900/70">
+            <div
+              className={`h-full rounded-full bg-gradient-to-r ${statusColor} transition-all duration-300`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Status Quick Actions */}
+        <div className="mt-4 flex flex-wrap gap-1.5 border-t border-white/10 pt-4">
+          {statusOptions.map((opt) => {
+            const Icon = opt.icon;
+            const isActive = season.status === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => handleStatusUpdate(opt.value)}
+                disabled={isActive || isUpdating === season.id}
+                className={`flex min-h-[32px] items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
+                  isActive
+                    ? "bg-gray-700/50 text-gray-500 cursor-not-allowed"
+                    : "bg-gray-700/50 text-gray-300 hover:bg-emerald-600/30 hover:text-white"
+                }`}
+              >
+                {isUpdating === season.id && !isActive ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Icon className="h-3 w-3" />
+                )}
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+SeasonCard.displayName = "SeasonCard";
+
+/* -------------------------------------------------------------------------- */
+/*                               Main Component                               */
 /* -------------------------------------------------------------------------- */
 
 export default function AdminSeasonsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -519,11 +488,37 @@ export default function AdminSeasonsPage() {
     })),
   ], [seasons]);
 
+  const handleEditSeason = useCallback((season: Season) => {
+    setEditingSeason(season);
+    setFormData({
+      name: season.name,
+      startDate: season.startDate.split("T")[0],
+      endDate: season.endDate.split("T")[0],
+      isActive: season.isActive,
+      status: season.status,
+    });
+    setShowForm(true);
+  }, []);
+
+  const handleCreateNew = useCallback(() => {
+    setEditingSeason(null);
+    setFormData({ name: "", startDate: "", endDate: "", isActive: false, status: "PRESEASON" });
+    setShowForm(true);
+  }, []);
+
+  const handleCloseForm = useCallback(() => {
+    setShowForm(false);
+  }, []);
+
+  const handleFormChange = useCallback((field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  }, []);
+
   if (status === "loading" || loading) {
     return (
       <>
         <DecorBackground />
-        <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="flex min-h-[50vh] items-center justify-center px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20" />
@@ -548,17 +543,9 @@ export default function AdminSeasonsPage() {
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6"
-      >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-emerald-600/20 via-green-600/20 to-teal-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
+        {/* Header - NO animations */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-emerald-600/20 via-green-600/20 to-teal-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-emerald-500/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -580,32 +567,25 @@ export default function AdminSeasonsPage() {
                 {seasons.length} seasons
               </span>
               <button
-                onClick={() => {
-                  setEditingSeason(null);
-                  setFormData({ name: "", startDate: "", endDate: "", isActive: false, status: "PRESEASON" });
-                  setShowForm(true);
-                }}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition-all hover:from-emerald-700 hover:to-green-700 sm:w-auto"
+                onClick={handleCreateNew}
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition-all duration-150 hover:from-emerald-700 hover:to-green-700 sm:w-auto"
               >
                 <Plus size={18} />
                 Create Season
               </button>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Stats - Mobile responsive grid */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {/* Stats - Mobile responsive grid - NO animations */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {stats.map((stat) => (
             <StatCard key={stat.label} stat={stat} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Search & Filter - Fully mobile responsive */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-2xl backdrop-blur-xl sm:p-4"
-        >
+        {/* Search & Filter - Fully mobile responsive - NO animations */}
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-2xl backdrop-blur-xl sm:p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -614,7 +594,7 @@ export default function AdminSeasonsPage() {
                 placeholder="Search seasons..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-500 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -623,7 +603,7 @@ export default function AdminSeasonsPage() {
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-8 text-sm text-white transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  className="min-h-[44px] w-full appearance-none rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-8 text-sm text-white transition-colors duration-150 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                 >
                   {filterButtons.map((btn) => (
                     <option key={btn.value} value={btn.value}>
@@ -635,7 +615,7 @@ export default function AdminSeasonsPage() {
               <div className="flex gap-1 rounded-xl border border-white/10 bg-gray-900/50 p-1">
                 <button
                   onClick={() => setViewMode("grid")}
-                  className={`flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg transition-all ${
+                  className={`flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg transition-colors duration-150 ${
                     viewMode === "grid" ? "bg-emerald-500/20 text-emerald-300" : "text-gray-400 hover:text-white"
                   }`}
                   title="Grid view"
@@ -644,7 +624,7 @@ export default function AdminSeasonsPage() {
                 </button>
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg transition-all ${
+                  className={`flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg transition-colors duration-150 ${
                     viewMode === "list" ? "bg-emerald-500/20 text-emerald-300" : "text-gray-400 hover:text-white"
                   }`}
                   title="List view"
@@ -654,14 +634,11 @@ export default function AdminSeasonsPage() {
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Seasons - Mobile responsive grid */}
+        {/* Seasons - Mobile responsive grid - NO animations */}
         {filteredSeasons.length === 0 ? (
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 py-12 text-center shadow-2xl backdrop-blur-xl"
-          >
+          <div className="rounded-2xl border border-white/10 bg-white/5 py-12 text-center shadow-2xl backdrop-blur-xl">
             <Calendar className="mx-auto mb-4 h-16 w-16 text-gray-600" />
             <h3 className="mb-2 text-lg font-semibold text-white sm:text-xl">
               {searchTerm || filterStatus !== "ALL" ? "No Matching Seasons" : "No Seasons Yet"}
@@ -671,38 +648,27 @@ export default function AdminSeasonsPage() {
                 ? "Try adjusting your search or filter."
                 : 'Click "Create Season" to start your first league season.'}
             </p>
-          </motion.div>
+          </div>
         ) : viewMode === "grid" ? (
-          <motion.div variants={containerVariants} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {filteredSeasons.map((season) => (
               <SeasonCard
                 key={season.id}
                 season={season}
-                onEdit={(s) => {
-                  setEditingSeason(s);
-                  setFormData({
-                    name: s.name,
-                    startDate: s.startDate.split("T")[0],
-                    endDate: s.endDate.split("T")[0],
-                    isActive: s.isActive,
-                    status: s.status,
-                  });
-                  setShowForm(true);
-                }}
+                onEdit={handleEditSeason}
                 onDelete={handleDelete}
                 onUpdateStatus={handleUpdateStatus}
                 isDeleting={deleting}
                 isUpdating={updating}
               />
             ))}
-          </motion.div>
+          </div>
         ) : (
-          <motion.div variants={containerVariants} className="space-y-3">
+          <div className="space-y-3">
             {filteredSeasons.map((season) => (
-              <motion.div
+              <div
                 key={season.id}
-                variants={itemVariants}
-                className="group overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-emerald-500/40 sm:p-5"
+                className="group overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-emerald-500/40 sm:p-5"
               >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0 flex-1">
@@ -711,7 +677,7 @@ export default function AdminSeasonsPage() {
                       <StatusBadge status={season.status} />
                       {season.isActive && (
                         <span className="inline-flex items-center gap-1 rounded-full border border-green-400/20 bg-green-500/15 px-2 py-0.5 text-[10px] font-medium text-green-300">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
+                          <span className={`h-1.5 w-1.5 rounded-full bg-green-400 ${isMobile ? "" : "animate-pulse"}`} />
                           Active
                         </span>
                       )}
@@ -723,25 +689,15 @@ export default function AdminSeasonsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex gap-1">
                       <button
-                        onClick={() => {
-                          setEditingSeason(season);
-                          setFormData({
-                            name: season.name,
-                            startDate: season.startDate.split("T")[0],
-                            endDate: season.endDate.split("T")[0],
-                            isActive: season.isActive,
-                            status: season.status,
-                          });
-                          setShowForm(true);
-                        }}
-                        className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-blue-400/20 bg-blue-500/10 text-blue-300 transition-all hover:bg-blue-500/20"
+                        onClick={() => handleEditSeason(season)}
+                        className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-blue-400/20 bg-blue-500/10 text-blue-300 transition-colors duration-150 hover:bg-blue-500/20"
                       >
                         <Edit size={16} />
                       </button>
                       <button
                         onClick={() => handleDelete(season.id)}
                         disabled={deleting === season.id}
-                        className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-300 transition-all hover:bg-red-500/20 disabled:opacity-50"
+                        className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-300 transition-colors duration-150 hover:bg-red-500/20 disabled:opacity-50"
                       >
                         {deleting === season.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -752,134 +708,126 @@ export default function AdminSeasonsPage() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
         )}
-      </motion.div>
+      </div>
 
-      {/* Create/Edit Modal - Mobile responsive */}
-      <AnimatePresence>
-        {showForm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4"
-            onClick={() => setShowForm(false)}
+      {/* Create/Edit Modal - Mobile responsive - NO animations */}
+      {showForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+          onClick={handleCloseForm}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-gray-800/95 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+            style={{ overscrollBehavior: 'contain' }}
           >
-            <motion.div
-              initial={{ opacity: 0, y: 28, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 28, scale: 0.95 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-gray-800/95 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-white sm:text-xl">
-                  {editingSeason ? "✏️ Edit Season" : "📅 Create New Season"}
-                </h2>
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-white/5 hover:text-white"
-                  aria-label="Close modal"
-                >
-                  <X size={20} />
-                </button>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-white sm:text-xl">
+                {editingSeason ? "✏️ Edit Season" : "📅 Create New Season"}
+              </h2>
+              <button
+                onClick={handleCloseForm}
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-gray-400 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+                aria-label="Close modal"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Season Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleFormChange("name", e.target.value)}
+                  required
+                  placeholder="e.g., Spring 2025 Season"
+                  className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-300">Season Name</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-300">Start Date</label>
                   <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    type="date"
+                    value={formData.startDate}
+                    onChange={(e) => handleFormChange("startDate", e.target.value)}
                     required
-                    placeholder="e.g., Spring 2025 Season"
-                    className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white placeholder-gray-500 transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                    className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white transition-colors duration-150 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-300">Start Date</label>
-                    <input
-                      type="date"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      required
-                      className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-300">End Date</label>
-                    <input
-                      type="date"
-                      value={formData.endDate}
-                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                      required
-                      className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                    />
-                  </div>
-                </div>
-
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-300">Initial Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  >
-                    {statusOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-gray-900/40 px-4 py-2.5 transition-colors hover:bg-gray-900/60">
+                  <label className="mb-1 block text-sm font-medium text-gray-300">End Date</label>
                   <input
-                    type="checkbox"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-emerald-600 focus:ring-emerald-500"
+                    type="date"
+                    value={formData.endDate}
+                    onChange={(e) => handleFormChange("endDate", e.target.value)}
+                    required
+                    className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white transition-colors duration-150 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
-                  <span className="text-sm text-gray-300">Activate this season immediately</span>
-                </label>
-
-                <div className="flex flex-col gap-3 pt-2 sm:flex-row">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-emerald-900/30 transition-all hover:from-emerald-700 hover:to-green-700 disabled:opacity-50"
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : editingSeason ? (
-                      "Update Season"
-                    ) : (
-                      "Create Season"
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowForm(false)}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-gray-700 px-6 py-2.5 font-semibold text-gray-300 transition-all hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
                 </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-300">Initial Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => handleFormChange("status", e.target.value)}
+                  className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/60 px-4 py-2.5 text-sm text-white transition-colors duration-150 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                >
+                  {statusOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-gray-900/40 px-4 py-2.5 transition-colors duration-150 hover:bg-gray-900/60">
+                <input
+                  type="checkbox"
+                  checked={formData.isActive}
+                  onChange={(e) => handleFormChange("isActive", e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-gray-300">Activate this season immediately</span>
+              </label>
+
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-emerald-900/30 transition-all duration-150 hover:from-emerald-700 hover:to-green-700 disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : editingSeason ? (
+                    "Update Season"
+                  ) : (
+                    "Create Season"
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseForm}
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-gray-700 px-6 py-2.5 font-semibold text-gray-300 transition-colors duration-150 hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

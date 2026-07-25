@@ -90,74 +90,54 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You are not registered for this season" }, { status: 403 })
     }
 
-    // ✅ Check if player already has a PlayerSeasonEntry
-    let playerEntry = await prisma.playerSeasonEntry.findUnique({
+    // ✅ Use upsert for PlayerSeasonEntry
+    const playerEntry = await prisma.playerSeasonEntry.upsert({
       where: {
         userId_seasonId: {
           userId: session.user.id,
           seasonId,
         },
       },
+      update: {
+        paymentPhone: cleanPhone,
+      },
+      create: {
+        userId: session.user.id,
+        seasonId,
+        hasPaid: false,
+        paymentPhone: cleanPhone,
+      },
     })
 
-    if (playerEntry?.hasPaid) {
+    if (playerEntry.hasPaid) {
       return NextResponse.json({ 
         error: "You have already paid for this season" 
       }, { status: 400 })
     }
 
-    // ✅ Check if there's an existing SeasonEntry (from old system)
-    let seasonEntry = await prisma.seasonEntry.findUnique({
+    // ✅ Use upsert for SeasonEntry
+    const entryFee = season.leagueSettings?.entryFee || season.prizePool?.entryFee || 50
+
+    const seasonEntry = await prisma.seasonEntry.upsert({
       where: {
         userId_seasonId: {
           userId: session.user.id,
           seasonId,
         },
       },
+      update: {
+        status: "PAYMENT_PENDING",
+        phoneNumber: cleanPhone,
+        entryFee,
+      },
+      create: {
+        userId: session.user.id,
+        seasonId,
+        status: "PAYMENT_PENDING",
+        entryFee,
+        phoneNumber: cleanPhone,
+      },
     })
-
-    const entryFee = season.leagueSettings?.entryFee || season.prizePool?.entryFee || 50
-
-    // ✅ Create or update PlayerSeasonEntry
-    if (!playerEntry) {
-      playerEntry = await prisma.playerSeasonEntry.create({
-        data: {
-          userId: session.user.id,
-          seasonId,
-          hasPaid: false,
-          paymentPhone: cleanPhone,
-        },
-      })
-    } else {
-      playerEntry = await prisma.playerSeasonEntry.update({
-        where: { id: playerEntry.id },
-        data: {
-          paymentPhone: cleanPhone,
-        },
-      })
-    }
-
-    // ✅ Create or update SeasonEntry for payment tracking
-    if (!seasonEntry) {
-      seasonEntry = await prisma.seasonEntry.create({
-        data: {
-          userId: session.user.id,
-          seasonId,
-          status: "PAYMENT_PENDING",
-          entryFee,
-          phoneNumber: cleanPhone,
-        },
-      })
-    } else {
-      seasonEntry = await prisma.seasonEntry.update({
-        where: { id: seasonEntry.id },
-        data: {
-          status: "PAYMENT_PENDING",
-          phoneNumber: cleanPhone,
-          entryFee,
-        },
-      })
-    }
 
     // ✅ Send REAL STK Push to Safaricom
     try {

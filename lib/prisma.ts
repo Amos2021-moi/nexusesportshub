@@ -1,6 +1,4 @@
 import { PrismaClient } from '@prisma/client'
-import { eventService } from './services/event.service'
-
 // ============================================ //
 // ✅ CONNECTION POOLING & CACHING              //
 // ============================================ //

@@ -36,7 +36,8 @@ async function checkResultModificationAllowed(seasonId: string) {
   }
 }
 
-export async function GET() {
+// ✅ GET: Fetch results with pagination, search, and filter (OPTIMIZED)
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
 
@@ -48,35 +49,159 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Get all results
-    const results = await prisma.result.findMany({
-      include: {
-        fixture: {
-          include: {
-            homePlayer: { include: { profile: true } },
-            awayPlayer: { include: { profile: true } }
-          }
-        },
-        user: { include: { profile: true } },
-        tournamentMatch: {
-          include: {
-            homePlayer: { include: { profile: true } },
-            awayPlayer: { include: { profile: true } },
-            tournament: true
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const filter = searchParams.get("filter") || "pending";
+    const search = searchParams.get("search") || "";
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
+    const seasonId = searchParams.get("seasonId");
+    const skip = (page - 1) * limit;
 
-    return NextResponse.json(results)
+    // ✅ Build where clause
+    const where: any = {};
+
+    if (filter === "pending") {
+      where.approved = false;
+    } else if (filter === "approved") {
+      where.approved = true;
+    }
+
+    if (search) {
+      where.OR = [
+        { fixture: { homePlayer: { name: { contains: search, mode: "insensitive" } } } },
+        { fixture: { awayPlayer: { name: { contains: search, mode: "insensitive" } } } },
+        { fixture: { homePlayer: { profile: { username: { contains: search, mode: "insensitive" } } } } },
+        { fixture: { awayPlayer: { profile: { username: { contains: search, mode: "insensitive" } } } } },
+        { tournamentMatch: { homePlayer: { name: { contains: search, mode: "insensitive" } } } },
+        { tournamentMatch: { awayPlayer: { name: { contains: search, mode: "insensitive" } } } },
+        { user: { name: { contains: search, mode: "insensitive" } } },
+        { user: { profile: { username: { contains: search, mode: "insensitive" } } } },
+        { source: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    if (dateFrom) {
+      where.createdAt = { ...where.createdAt, gte: new Date(dateFrom) };
+    }
+    if (dateTo) {
+      where.createdAt = { ...where.createdAt, lte: new Date(dateTo) };
+    }
+
+    if (seasonId && seasonId !== "all") {
+      where.fixture = { seasonId };
+    }
+
+    // ✅ Get total count (fast with index)
+    const total = await prisma.result.count({ where });
+
+    // ✅ OPTIMIZED: Select only needed fields, not include full relations
+    const results = await prisma.result.findMany({
+      where,
+      select: {
+        id: true,
+        homeScore: true,
+        awayScore: true,
+        evidenceImage: true,
+        submittedBy: true,
+        approved: true,
+        source: true,
+        createdAt: true,
+        fixtureId: true,
+        tournamentMatchId: true,
+        fixture: {
+          select: {
+            id: true,
+            scheduledDate: true,
+            seasonId: true,
+            homePlayer: {
+              select: {
+                name: true,
+                profile: {
+                  select: {
+                    username: true,
+                    profilePicture: true,
+                  },
+                },
+              },
+            },
+            awayPlayer: {
+              select: {
+                name: true,
+                profile: {
+                  select: {
+                    username: true,
+                    profilePicture: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        tournamentMatch: {
+          select: {
+            id: true,
+            homePlayer: {
+              select: {
+                name: true,
+                profile: {
+                  select: {
+                    username: true,
+                  },
+                },
+              },
+            },
+            awayPlayer: {
+              select: {
+                name: true,
+                profile: {
+                  select: {
+                    username: true,
+                  },
+                },
+              },
+            },
+            tournament: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+        user: {
+          select: {
+            name: true,
+            profile: {
+              select: {
+                username: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    });
+
+    return NextResponse.json({
+      results,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    });
   } catch (error) {
     console.error("Error fetching results:", error)
-    return NextResponse.json([])
+    return NextResponse.json(
+      { error: "Failed to fetch results" },
+      { status: 500 }
+    )
   }
 }
 
-// ✅ POST: Approve result with freeze/lock checks
+// ✅ POST: Approve or Reject result with freeze/lock checks
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -90,7 +215,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { resultId, action } = body // action: "approve" or "reject"
+    const { resultId, action } = body
 
     if (!resultId || !action) {
       return NextResponse.json(
@@ -120,12 +245,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Result not found" }, { status: 404 })
     }
 
+    if (result.approved && action === "approve") {
+      return NextResponse.json({ error: "Result already approved" }, { status: 400 })
+    }
+
     // Determine season ID
     let seasonId: string | null = null
     if (result.fixture) {
       seasonId = result.fixture.seasonId
     } else if (result.tournamentMatch) {
-      // For tournament results, check if there's a season
       const tournament = await prisma.tournament.findUnique({
         where: { id: result.tournamentMatch.tournamentId },
         include: { season: true }
@@ -142,14 +270,11 @@ export async function POST(request: Request) {
 
     // Handle approve or reject
     if (action === "approve") {
-      // Use the existing approve function from result.service
-      // For now, just update the result
       await prisma.result.update({
         where: { id: resultId },
         data: { approved: true }
       })
 
-      // If it's a league result, update fixture status
       if (result.fixtureId) {
         await prisma.fixture.update({
           where: { id: result.fixtureId },
@@ -160,19 +285,16 @@ export async function POST(request: Request) {
           }
         })
 
-        // Update league entries (standings)
-        // This would be handled by the result.service
+        await updateLeagueStandings(result.fixtureId)
       }
 
       return NextResponse.json({ success: true, message: "Result approved" })
     } 
     else if (action === "reject") {
-      // Delete the result
       await prisma.result.delete({
         where: { id: resultId }
       })
 
-      // Reset fixture status
       if (result.fixtureId) {
         await prisma.fixture.update({
           where: { id: result.fixtureId },
@@ -192,6 +314,87 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to process result"
+    console.error("Error processing result:", error)
     return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+// ✅ Helper function to update league standings (OPTIMIZED)
+async function updateLeagueStandings(fixtureId: string) {
+  try {
+    const fixture = await prisma.fixture.findUnique({
+      where: { id: fixtureId },
+      include: {
+        result: true,
+        season: true
+      }
+    })
+
+    if (!fixture || !fixture.result) {
+      throw new Error("Fixture or result not found")
+    }
+
+    const { homePlayerId, awayPlayerId, homeScore, awayScore } = fixture
+    const seasonId = fixture.seasonId
+
+    if (homeScore === null || awayScore === null) {
+      throw new Error("Scores not set")
+    }
+
+    // ✅ Update both players in parallel
+    await Promise.all([
+      updatePlayerStandings(seasonId, homePlayerId, homeScore, awayScore),
+      updatePlayerStandings(seasonId, awayPlayerId, awayScore, homeScore)
+    ])
+
+  } catch (error) {
+    console.error("Error updating league standings:", error)
+  }
+}
+
+// ✅ Helper to update a single player's standings (OPTIMIZED)
+async function updatePlayerStandings(seasonId: string, playerId: string, goalsFor: number, goalsAgainst: number) {
+  const existingEntry = await prisma.leagueEntry.findUnique({
+    where: {
+      seasonId_playerId: {
+        seasonId,
+        playerId
+      }
+    }
+  })
+
+  const points = goalsFor > goalsAgainst ? 3 : goalsFor === goalsAgainst ? 1 : 0
+  const win = goalsFor > goalsAgainst ? 1 : 0
+  const draw = goalsFor === goalsAgainst ? 1 : 0
+  const loss = goalsFor < goalsAgainst ? 1 : 0
+
+  if (existingEntry) {
+    await prisma.leagueEntry.update({
+      where: { id: existingEntry.id },
+      data: {
+        played: { increment: 1 },
+        wins: { increment: win },
+        draws: { increment: draw },
+        losses: { increment: loss },
+        goalsFor: { increment: goalsFor },
+        goalsAgainst: { increment: goalsAgainst },
+        points: { increment: points },
+      }
+    })
+  } else {
+    await prisma.leagueEntry.create({
+      data: {
+        seasonId,
+        playerId,
+        played: 1,
+        wins: win,
+        draws: draw,
+        losses: loss,
+        goalsFor,
+        goalsAgainst,
+        goalDifference: goalsFor - goalsAgainst,
+        points,
+      }
+    })
   }
 }

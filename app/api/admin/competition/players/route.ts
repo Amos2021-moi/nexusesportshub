@@ -158,74 +158,56 @@ export async function POST(request: Request) {
       )
     }
 
-    // ✅ Check if SeasonEntry exists, create or update
-    let seasonEntry = await prisma.seasonEntry.findUnique({
+    // ✅ Use upsert for SeasonEntry
+    const seasonEntry = await prisma.seasonEntry.upsert({
       where: {
         userId_seasonId: {
           userId,
           seasonId,
         },
       },
+      update: {
+        status: CompetitionStatus.ACTIVE,
+        paidAt: new Date(),
+        mpesaReceipt: receipt || `ADMIN-${Date.now()}`,
+        resultCode: 0,
+        resultDesc: "Marked as paid by admin",
+      },
+      create: {
+        userId,
+        seasonId,
+        status: CompetitionStatus.ACTIVE,
+        entryFee: 50,
+        paidAt: new Date(),
+        mpesaReceipt: receipt || `ADMIN-${Date.now()}`,
+        resultCode: 0,
+        resultDesc: "Marked as paid by admin",
+      },
     })
 
-    if (seasonEntry) {
-      seasonEntry = await prisma.seasonEntry.update({
-        where: { id: seasonEntry.id },
-        data: {
-          status: CompetitionStatus.ACTIVE,
-          paidAt: new Date(),
-          mpesaReceipt: receipt || `ADMIN-${Date.now()}`,
-          resultCode: 0,
-          resultDesc: "Marked as paid by admin",
-        },
-      })
-    } else {
-      seasonEntry = await prisma.seasonEntry.create({
-        data: {
-          userId,
-          seasonId,
-          status: CompetitionStatus.ACTIVE,
-          entryFee: 50,
-          paidAt: new Date(),
-          mpesaReceipt: receipt || `ADMIN-${Date.now()}`,
-          resultCode: 0,
-          resultDesc: "Marked as paid by admin",
-        },
-      })
-    }
-
-    // ✅ Also update PlayerSeasonEntry
-    let playerEntry = await prisma.playerSeasonEntry.findUnique({
+    // ✅ Use upsert for PlayerSeasonEntry
+    const playerEntry = await prisma.playerSeasonEntry.upsert({
       where: {
         userId_seasonId: {
           userId,
           seasonId,
         },
       },
+      update: {
+        hasPaid: true,
+        paidAt: new Date(),
+        paymentReceipt: receipt || `ADMIN-${Date.now()}`,
+        paymentMethod: method || "CASH",
+      },
+      create: {
+        userId,
+        seasonId,
+        hasPaid: true,
+        paidAt: new Date(),
+        paymentReceipt: receipt || `ADMIN-${Date.now()}`,
+        paymentMethod: method || "CASH",
+      },
     })
-
-    if (playerEntry) {
-      playerEntry = await prisma.playerSeasonEntry.update({
-        where: { id: playerEntry.id },
-        data: {
-          hasPaid: true,
-          paidAt: new Date(),
-          paymentReceipt: receipt || `ADMIN-${Date.now()}`,
-          paymentMethod: method || "CASH",
-        },
-      })
-    } else {
-      playerEntry = await prisma.playerSeasonEntry.create({
-        data: {
-          userId,
-          seasonId,
-          hasPaid: true,
-          paidAt: new Date(),
-          paymentReceipt: receipt || `ADMIN-${Date.now()}`,
-          paymentMethod: method || "CASH",
-        },
-      })
-    }
 
     // ✅ Update prize pool
     await updatePrizePool(seasonId)

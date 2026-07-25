@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
-import { motion, type Variants, AnimatePresence } from "framer-motion";
 import {
   Users,
   DollarSign,
@@ -21,16 +20,11 @@ import {
   Sparkles,
   FileText,
   FileSpreadsheet,
-  ChevronRight,
-  Loader2,
-  Zap,
-  Calendar,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { generatePDFReport, generateExcelReport } from "@/lib/utils/exportPayments";
-import { Skeleton } from "@/components/ui/Skeleton";
 
 // Types
 interface PaymentStats {
@@ -86,62 +80,15 @@ interface Pagination {
 }
 
 // ----------------------------------------------------------------------------
-// Animation Variants
-// ----------------------------------------------------------------------------
-
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
-  },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
-
-// ----------------------------------------------------------------------------
-// Decor Background
+// Decor Background - NO ANIMATIONS
 // ----------------------------------------------------------------------------
 
 const DecorBackground = memo(() => (
   <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
     <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-pink-500/10 blur-3xl"
-    />
+    <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-indigo-600/20 blur-3xl" />
+    <div className="absolute -right-32 top-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
+    <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-pink-500/10 blur-3xl" />
     <div
       className="absolute inset-0 opacity-[0.03]"
       style={{
@@ -163,29 +110,9 @@ function formatCurrency(amount: number): string {
   return `KES ${Math.round(amount).toLocaleString()}`;
 }
 
-// Build a smooth (catmull-rom -> bezier) SVG path from points for a premium curve.
-function smoothLinePath(pts: { x: number; y: number }[]): string {
-  if (pts.length === 0) return "";
-  if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
-  let d = `M ${pts[0].x},${pts[0].y}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] || pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] || p2;
-    const t = 0.18;
-    const c1x = p1.x + (p2.x - p0.x) * t;
-    const c1y = p1.y + (p2.y - p0.y) * t;
-    const c2x = p2.x - (p3.x - p1.x) * t;
-    const c2y = p2.y - (p3.y - p1.y) * t;
-    d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
-  }
-  return d;
-}
-
-/* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
-/* -------------------------------------------------------------------------- */
+// ----------------------------------------------------------------------------
+// Memoized Components - NO ANIMATIONS
+// ----------------------------------------------------------------------------
 
 const StatCard = memo(({ stat }: { stat: any }) => {
   const Icon = stat.icon;
@@ -193,46 +120,38 @@ const StatCard = memo(({ stat }: { stat: any }) => {
   const isNegative = stat.change && stat.change < 0;
 
   return (
-    <motion.div
-      variants={statCardVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
-      className="will-change-transform"
-    >
-      <div className="group relative h-full min-h-[80px] overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-indigo-500/50">
-        <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 blur-2xl transition-opacity duration-500 group-hover:opacity-40" />
-        <div className="relative flex h-full flex-col justify-between">
-          <div className="mb-2 flex items-center justify-between">
-            <div className={`rounded-lg ${stat.bg} p-2`}>
-              <Icon className={`h-4 w-4 ${stat.accent}`} />
-            </div>
-            {stat.change !== 0 && (
-              <span
-                className={`flex items-center gap-0.5 text-xs font-medium ${
-                  isPositive
-                    ? "text-emerald-400"
-                    : isNegative
-                    ? "text-red-400"
-                    : "text-gray-500"
-                }`}
-              >
-                {isPositive ? (
-                  <ArrowUpRight className="h-3 w-3" />
-                ) : isNegative ? (
-                  <ArrowDownRight className="h-3 w-3" />
-                ) : null}
-                {Math.abs(stat.change)}%
-              </span>
-            )}
+    <div className="group relative h-full min-h-[80px] overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-indigo-500/50">
+      <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 blur-2xl transition-opacity duration-500 group-hover:opacity-40" />
+      <div className="relative flex h-full flex-col justify-between">
+        <div className="mb-2 flex items-center justify-between">
+          <div className={`rounded-lg ${stat.bg} p-2`}>
+            <Icon className={`h-4 w-4 ${stat.accent}`} />
           </div>
-          <div>
-            <p className="truncate text-xl font-bold text-white">{stat.value}</p>
-            <p className="mt-0.5 truncate text-xs text-gray-400">{stat.label}</p>
-          </div>
+          {stat.change !== 0 && (
+            <span
+              className={`flex items-center gap-0.5 text-xs font-medium ${
+                isPositive
+                  ? "text-emerald-400"
+                  : isNegative
+                  ? "text-red-400"
+                  : "text-gray-500"
+              }`}
+            >
+              {isPositive ? (
+                <ArrowUpRight className="h-3 w-3" />
+              ) : isNegative ? (
+                <ArrowDownRight className="h-3 w-3" />
+              ) : null}
+              {Math.abs(stat.change)}%
+            </span>
+          )}
+        </div>
+        <div>
+          <p className="truncate text-xl font-bold text-white">{stat.value}</p>
+          <p className="mt-0.5 truncate text-xs text-gray-400">{stat.label}</p>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
@@ -245,11 +164,9 @@ const StatusBar = memo(({ item }: { item: StatusDistribution }) => (
       <span className="font-medium text-white">{item.count}</span>
     </div>
     <div className="h-2 overflow-hidden rounded-full bg-gray-700">
-      <motion.div
+      <div
         className={`h-full rounded-full ${getStatusColor(item.color)}`}
-        initial={{ width: 0 }}
-        animate={{ width: `${item.percentage}%` }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
+        style={{ width: `${item.percentage}%` }}
       />
     </div>
     <div className="text-right text-xs text-gray-500">{item.percentage}%</div>
@@ -490,6 +407,8 @@ export default function PaymentAnalyticsPage() {
   }
 
   async function fetchPayments() {
+    if (session?.user?.role !== "ADMIN") return;
+
     const params = new URLSearchParams({
       page: pagination.page.toString(),
       limit: "20",
@@ -500,8 +419,44 @@ export default function PaymentAnalyticsPage() {
     const res = await fetch(`/api/admin/payments/list?${params}`);
     if (res.ok) {
       const data = await res.json();
-      setPayments(data.payments);
-      setPagination(data.pagination);
+      
+      if (Array.isArray(data)) {
+        setPayments(data);
+        setPagination({
+          total: data.length,
+          page: 1,
+          limit: 20,
+          pages: Math.ceil(data.length / 20),
+        });
+      } else if (data.payments && Array.isArray(data.payments)) {
+        setPayments(data.payments);
+        if (data.pagination) {
+          setPagination(data.pagination);
+        } else {
+          setPagination({
+            total: data.payments.length,
+            page: 1,
+            limit: 20,
+            pages: Math.ceil(data.payments.length / 20),
+          });
+        }
+      } else {
+        setPayments([]);
+        setPagination({
+          total: 0,
+          page: 1,
+          limit: 20,
+          pages: 0,
+        });
+      }
+    } else {
+      setPayments([]);
+      setPagination({
+        total: 0,
+        page: 1,
+        limit: 20,
+        pages: 0,
+      });
     }
   }
 
@@ -581,56 +536,60 @@ export default function PaymentAnalyticsPage() {
     setIsExportOpen(false);
   }, [stats, payments, revenueDays]);
 
-  const statCards = useMemo(() => stats ? [
-    {
-      label: "Total Revenue",
-      value: formatCurrency(stats.totalRevenue),
-      icon: DollarSign,
-      accent: "text-emerald-400",
-      bg: "bg-emerald-500/10",
-      change: stats.revenueChange,
-    },
-    {
-      label: "Total Payments",
-      value: stats.totalPayments,
-      icon: CreditCard,
-      accent: "text-blue-400",
-      bg: "bg-blue-500/10",
-      change: stats.paymentChange,
-    },
-    {
-      label: "Success Rate",
-      value: `${stats.successRate.toFixed(1)}%`,
-      icon: CheckCircle,
-      accent: "text-green-400",
-      bg: "bg-green-500/10",
-      change: 0,
-    },
-    {
-      label: "Avg Entry Fee",
-      value: formatCurrency(stats.averageFee),
-      icon: Wallet,
-      accent: "text-purple-400",
-      bg: "bg-purple-500/10",
-      change: 0,
-    },
-    {
-      label: "Active Payers",
-      value: stats.activePayers,
-      icon: Users,
-      accent: "text-cyan-400",
-      bg: "bg-cyan-500/10",
-      change: 0,
-    },
-    {
-      label: "Pending",
-      value: stats.pendingCount,
-      icon: Clock,
-      accent: "text-yellow-400",
-      bg: "bg-yellow-500/10",
-      change: 0,
-    },
-  ] : [], [stats]);
+  const statCards = useMemo(() => {
+    if (!stats) return [];
+
+    return [
+      {
+        label: "Total Revenue",
+        value: formatCurrency(stats.totalRevenue || 0),
+        icon: DollarSign,
+        accent: "text-emerald-400",
+        bg: "bg-emerald-500/10",
+        change: stats.revenueChange || 0,
+      },
+      {
+        label: "Total Payments",
+        value: stats.totalPayments || 0,
+        icon: CreditCard,
+        accent: "text-blue-400",
+        bg: "bg-blue-500/10",
+        change: stats.paymentChange || 0,
+      },
+      {
+        label: "Success Rate",
+        value: `${(stats.successRate || 0).toFixed(1)}%`,
+        icon: CheckCircle,
+        accent: "text-green-400",
+        bg: "bg-green-500/10",
+        change: 0,
+      },
+      {
+        label: "Avg Entry Fee",
+        value: formatCurrency(stats.averageFee || 0),
+        icon: Wallet,
+        accent: "text-purple-400",
+        bg: "bg-purple-500/10",
+        change: 0,
+      },
+      {
+        label: "Active Payers",
+        value: stats.activePayers || 0,
+        icon: Users,
+        accent: "text-cyan-400",
+        bg: "bg-cyan-500/10",
+        change: 0,
+      },
+      {
+        label: "Pending",
+        value: stats.pendingCount || 0,
+        icon: Clock,
+        accent: "text-yellow-400",
+        bg: "bg-yellow-500/10",
+        change: 0,
+      },
+    ];
+  }, [stats]);
 
   if (status === "loading" || loading) {
     return (
@@ -661,17 +620,9 @@ export default function PaymentAnalyticsPage() {
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
-        {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-4 shadow-2xl backdrop-blur-xl transition-all hover:border-indigo-500/40 sm:p-6"
-        >
+      <div className="space-y-5 sm:space-y-6">
+        {/* Header - NO ANIMATIONS */}
+        <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-indigo-500/40 sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl transition-opacity group-hover:opacity-75" />
           <div className="absolute -bottom-10 -left-10 h-40 w-40 rounded-full bg-pink-500/10 blur-3xl transition-opacity group-hover:opacity-75" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -741,22 +692,19 @@ export default function PaymentAnalyticsPage() {
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Stats Grid */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {/* Stats Grid - NO ANIMATIONS */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {statCards.map((stat) => (
             <StatCard key={stat.label} stat={stat} />
           ))}
-        </motion.div>
+        </div>
 
-        {/* Charts Section */}
+        {/* Charts Section - NO ANIMATIONS */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
-          {/* Revenue Chart */}
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-indigo-500/40 sm:p-6 lg:col-span-2"
-          >
+          {/* Revenue Chart - NO ANIMATIONS */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-indigo-500/40 sm:p-6 lg:col-span-2">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="rounded-lg bg-indigo-500/10 p-2">
@@ -905,13 +853,10 @@ export default function PaymentAnalyticsPage() {
                 </div>
               </div>
             )}
-          </motion.div>
+          </div>
 
-          {/* Status Distribution */}
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-purple-500/40 sm:p-6"
-          >
+          {/* Status Distribution - NO ANIMATIONS */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-purple-500/40 sm:p-6">
             <div className="mb-4 flex items-center gap-2">
               <div className="rounded-lg bg-purple-500/10 p-2">
                 <PieChart className="h-5 w-5 text-purple-400" />
@@ -932,16 +877,13 @@ export default function PaymentAnalyticsPage() {
                 ))}
               </div>
             )}
-          </motion.div>
+          </div>
         </div>
 
-        {/* Payment Methods & Recent Payments */}
+        {/* Payment Methods & Recent Payments - NO ANIMATIONS */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-4 lg:gap-6">
-          {/* Payment Methods */}
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-cyan-500/40 sm:p-6 lg:col-span-1"
-          >
+          {/* Payment Methods - NO ANIMATIONS */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-cyan-500/40 sm:p-6 lg:col-span-1">
             <div className="mb-4 flex items-center gap-2">
               <div className="rounded-lg bg-cyan-500/10 p-2">
                 <CreditCard className="h-5 w-5 text-cyan-400" />
@@ -966,13 +908,10 @@ export default function PaymentAnalyticsPage() {
                 ))
               )}
             </div>
-          </motion.div>
+          </div>
 
-          {/* Recent Payments */}
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-indigo-500/40 sm:p-6 lg:col-span-3"
-          >
+          {/* Recent Payments - NO ANIMATIONS */}
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl transition-colors hover:border-indigo-500/40 sm:p-6 lg:col-span-3">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <div className="rounded-lg bg-indigo-500/10 p-2">
@@ -1067,9 +1006,29 @@ export default function PaymentAnalyticsPage() {
                 </div>
               </div>
             )}
-          </motion.div>
+          </div>
         </div>
-      </motion.div>
+      </div>
     </>
   );
+}
+
+// Add smoothLinePath function (needed for SVG chart)
+function smoothLinePath(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
+  let d = `M ${pts[0].x},${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const t = 0.18;
+    const c1x = p1.x + (p2.x - p0.x) * t;
+    const c1y = p1.y + (p2.y - p0.y) * t;
+    const c2x = p2.x - (p3.x - p1.x) * t;
+    const c2y = p2.y - (p3.y - p1.y) * t;
+    d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+  }
+  return d;
 }

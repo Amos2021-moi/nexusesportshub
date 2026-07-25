@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useCallback, useState, useEffect } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -24,6 +25,29 @@ interface PredictionFactorsProps {
   };
   className?: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           Helper Functions                                */
+/* -------------------------------------------------------------------------- */
 
 const factorIcons = {
   eloAdvantage: Zap,
@@ -62,10 +86,51 @@ function getFactorColorClass(color: string) {
   return "text-gray-400 bg-gray-500/10 border-gray-500/20";
 }
 
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Components                               */
+/* -------------------------------------------------------------------------- */
+
+// === STATIC Factor Item ===
+const FactorItem = memo(({ 
+  value, 
+  icon: Icon, 
+  label 
+}: { 
+  value: string; 
+  icon: any; 
+  label: string;
+}) => {
+  const color = getFactorColor(value);
+  const StatusIcon = getFactorIcon(value);
+  const colorClass = getFactorColorClass(color);
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs",
+        colorClass
+      )}
+    >
+      <Icon className="h-3 w-3 flex-shrink-0" />
+      <span className="flex-1 truncate">{value}</span>
+      <StatusIcon className="h-3 w-3 flex-shrink-0" />
+    </div>
+  );
+});
+
+FactorItem.displayName = "FactorItem";
+
+/* -------------------------------------------------------------------------- */
+/*                           Main Component                                  */
+/* -------------------------------------------------------------------------- */
+
 export default function PredictionFactors({
   factors,
   className,
 }: PredictionFactorsProps) {
+  const isMobile = useIsMobile();
+
+  // ✅ No animations - static rendering
   return (
     <div className={cn("space-y-2", className)}>
       <p className="text-xs font-medium text-gray-400">📋 Key Factors</p>
@@ -73,22 +138,14 @@ export default function PredictionFactors({
         {Object.entries(factors).map(([key, value]) => {
           const Icon = factorIcons[key as keyof typeof factorIcons];
           const label = factorLabels[key as keyof typeof factorLabels];
-          const color = getFactorColor(value);
-          const StatusIcon = getFactorIcon(value);
-          const colorClass = getFactorColorClass(color);
 
           return (
-            <div
-              key={key}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs",
-                colorClass
-              )}
-            >
-              <Icon className="h-3 w-3 flex-shrink-0" />
-              <span className="flex-1 truncate">{value}</span>
-              <StatusIcon className="h-3 w-3 flex-shrink-0" />
-            </div>
+              <FactorItem
+                key={key}
+                value={value}
+                icon={Icon}
+                label={label}
+              />
           );
         })}
       </div>

@@ -108,6 +108,26 @@ function statusConfig(status: string) {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Background - INTEGRATED                  */
+/* -------------------------------------------------------------------------- */
+
+const DecorBackground = () => (
+  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
+    <div className="absolute -left-32 top-0 h-72 w-72 rounded-full bg-indigo-600/20 blur-[120px]" />
+    <div className="absolute -right-32 top-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-[120px]" />
+    <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-pink-600/10 blur-[120px]" />
+    <div
+      className="absolute inset-0 opacity-[0.15]"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+        backgroundSize: "48px 48px",
+      }}
+    />
+  </div>
+);
+
 export default function TournamentPage() {
   const { id } = useParams();
   const { data: session } = useSession();
@@ -119,7 +139,6 @@ export default function TournamentPage() {
     if (id) {
       fetchTournament();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function fetchTournament() {
@@ -147,48 +166,49 @@ export default function TournamentPage() {
     }
   }
 
-  // ✅ Show header with tournament info
   if (loading) {
     return (
-      <div className="relative min-h-screen py-8">
+      <>
         <DecorBackground />
-        <div className="mx-auto max-w-7xl px-4">
+        <div className="mx-auto max-w-7xl px-4 py-8">
           <Skeleton variant="card" className="mb-8 h-40" />
           <SkeletonTournamentBracket />
         </div>
-      </div>
+      </>
     );
   }
 
   if (!tournament) {
     return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center gap-4">
+      <>
         <DecorBackground />
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45 }}
-          className="rounded-2xl border border-white/10 bg-gray-800/40 p-10 text-center shadow-2xl backdrop-blur-xl"
-        >
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-700/40 ring-1 ring-white/10">
-            <Trophy className="h-8 w-8 text-gray-500" />
-          </div>
-          <h2 className="mb-2 text-2xl font-bold text-white">
-            Tournament Not Found
-          </h2>
-          <p className="text-gray-400">
-            The tournament you&apos;re looking for doesn&apos;t exist or
-            hasn&apos;t been created yet.
-          </p>
-          <Link
-            href="/tournaments"
-            className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/10 bg-gray-900/40 px-4 py-2 text-indigo-400 transition-all hover:bg-white/10 hover:text-indigo-300"
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45 }}
+            className="rounded-2xl border border-white/10 bg-gray-800/40 p-10 text-center shadow-2xl backdrop-blur-xl"
           >
-            <ArrowLeft size={16} />
-            View All Tournaments
-          </Link>
-        </motion.div>
-      </div>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-700/40 ring-1 ring-white/10">
+              <Trophy className="h-8 w-8 text-gray-500" />
+            </div>
+            <h2 className="mb-2 text-2xl font-bold text-white">
+              Tournament Not Found
+            </h2>
+            <p className="text-gray-400">
+              The tournament you&apos;re looking for doesn&apos;t exist or
+              hasn&apos;t been created yet.
+            </p>
+            <Link
+              href="/tournaments"
+              className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/10 bg-gray-900/40 px-4 py-2 text-indigo-400 transition-all hover:bg-white/10 hover:text-indigo-300"
+            >
+              <ArrowLeft size={16} />
+              View All Tournaments
+            </Link>
+          </motion.div>
+        </div>
+      </>
     );
   }
 
@@ -197,155 +217,137 @@ export default function TournamentPage() {
   const participantCount = tournament.participants?.length || 0;
 
   return (
-    <div className="relative min-h-screen py-8">
+    <>
       <DecorBackground />
-
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="mx-auto max-w-7xl px-4"
-      >
-        {/* Back link */}
-        <motion.div variants={itemVariants} className="mb-4">
-          <Link
-            href="/tournaments"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
-          >
-            <ArrowLeft size={16} />
-            All Tournaments
-          </Link>
-        </motion.div>
-
-        {/* ✅ Header - Restored with View Stats */}
+      <div className="relative min-h-screen py-8">
         <motion.div
-          variants={itemVariants}
-          className="relative mb-8 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 shadow-2xl shadow-indigo-500/20 md:p-8"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="mx-auto max-w-7xl px-4"
         >
-          <div className="absolute inset-0 bg-black/20" />
-          <motion.div
-            className="absolute -right-10 -top-10 h-64 w-64 rounded-full bg-white/10 blur-3xl"
-            animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.8, 0.5] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute -bottom-16 left-10 h-56 w-56 rounded-full bg-pink-400/20 blur-3xl"
-            animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.7, 0.4] }}
-            transition={{
-              duration: 7,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: 1,
-            }}
-          />
+          {/* Back link */}
+          <motion.div variants={itemVariants} className="mb-4">
+            <Link
+              href="/tournaments"
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
+            >
+              <ArrowLeft size={16} />
+              All Tournaments
+            </Link>
+          </motion.div>
 
-          <div className="relative z-10">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="mb-2 flex items-center gap-3">
-                  <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
-                    <Trophy className="h-7 w-7 text-yellow-300" />
-                  </span>
-                  <h1 className="text-2xl font-bold text-white md:text-3xl">
-                    {tournament.name}
-                  </h1>
-                </div>
-                <p className="max-w-2xl text-sm text-white/80 md:text-base">
-                  {tournament.description}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs md:text-sm">
-                  <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-sm">
-                    <Calendar size={14} className="text-white/70" />
-                    <span className="text-white/80">
-                      {new Date(tournament.startDate).toLocaleDateString()} -{" "}
-                      {new Date(tournament.endDate).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-sm">
-                    <Users size={14} className="text-white/70" />
-                    <span className="text-white/80">
-                      {participantCount} / {tournament.maxPlayers} Players
-                    </span>
-                  </div>
-                  <div
-                    className={`flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 backdrop-blur-sm ${cfg.pill}`}
-                  >
-                    <div className={`h-2 w-2 rounded-full ${cfg.dot}`} />
-                    <StatusIcon size={13} className={cfg.iconColor} />
-                    <span className="font-medium text-white/90">
-                      {cfg.label}
-                    </span>
-                  </div>
-                </div>
+          {/* Header */}
+          <motion.div
+            variants={itemVariants}
+            className="relative mb-8 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-6 shadow-2xl shadow-indigo-500/20 md:p-8"
+          >
+            <div className="absolute inset-0 bg-black/20" />
+            <motion.div
+              className="absolute -right-10 -top-10 h-64 w-64 rounded-full bg-white/10 blur-3xl"
+              animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.8, 0.5] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div
+              className="absolute -bottom-16 left-10 h-56 w-56 rounded-full bg-pink-400/20 blur-3xl"
+              animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.7, 0.4] }}
+              transition={{
+                duration: 7,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: 1,
+              }}
+            />
 
-                {/* Participant avatar stack */}
-                {participantCount > 0 && (
-                  <div className="mt-4 flex items-center gap-3">
-                    <div className="flex -space-x-2">
-                      {tournament.participants
-                        .slice(0, 6)
-                        .map((p: any, i: number) => {
-                          const pName =
-                            p?.user?.profile?.username ||
-                            p?.user?.name ||
-                            p?.profile?.username ||
-                            p?.name ||
-                            "P";
-                          return (
-                            <span
-                              key={i}
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-[11px] font-bold text-white ring-2 ring-purple-700/60"
-                              title={pName}
-                            >
-                              {String(pName).charAt(0).toUpperCase()}
-                            </span>
-                          );
-                        })}
-                    </div>
-                    {participantCount > 6 && (
-                      <span className="text-xs font-medium text-white/80">
-                        +{participantCount - 6} more
+            <div className="relative z-10">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="mb-2 flex items-center gap-3">
+                    <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                      <Trophy className="h-7 w-7 text-yellow-300" />
+                    </span>
+                    <h1 className="text-2xl font-bold text-white md:text-3xl">
+                      {tournament.name}
+                    </h1>
+                  </div>
+                  <p className="max-w-2xl text-sm text-white/80 md:text-base">
+                    {tournament.description}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs md:text-sm">
+                    <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-sm">
+                      <Calendar size={14} className="text-white/70" />
+                      <span className="text-white/80">
+                        {new Date(tournament.startDate).toLocaleDateString()} -{" "}
+                        {new Date(tournament.endDate).toLocaleDateString()}
                       </span>
-                    )}
+                    </div>
+                    <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-sm">
+                      <Users size={14} className="text-white/70" />
+                      <span className="text-white/80">
+                        {participantCount} / {tournament.maxPlayers} Players
+                      </span>
+                    </div>
+                    <div
+                      className={`flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 backdrop-blur-sm ${cfg.pill}`}
+                    >
+                      <div className={`h-2 w-2 rounded-full ${cfg.dot}`} />
+                      <StatusIcon size={13} className={cfg.iconColor} />
+                      <span className="font-medium text-white/90">
+                        {cfg.label}
+                      </span>
+                    </div>
                   </div>
-                )}
+
+                  {/* Participant avatar stack */}
+                  {participantCount > 0 && (
+                    <div className="mt-4 flex items-center gap-3">
+                      <div className="flex -space-x-2">
+                        {tournament.participants
+                          .slice(0, 6)
+                          .map((p: any, i: number) => {
+                            const pName =
+                              p?.user?.profile?.username ||
+                              p?.user?.name ||
+                              p?.profile?.username ||
+                              p?.name ||
+                              "P";
+                            return (
+                              <span
+                                key={i}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-[11px] font-bold text-white ring-2 ring-purple-700/60"
+                                title={pName}
+                              >
+                                {String(pName).charAt(0).toUpperCase()}
+                              </span>
+                            );
+                          })}
+                      </div>
+                      {participantCount > 6 && (
+                        <span className="text-xs font-medium text-white/80">
+                          +{participantCount - 6} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <Link
+                  href={`/tournaments/${id}/stats`}
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm text-white ring-1 ring-white/20 backdrop-blur-sm transition-all hover:bg-white/20"
+                >
+                  <BarChart3 size={16} />
+                  View Stats →
+                </Link>
               </div>
-
-              <Link
-                href={`/tournaments/${id}/stats`}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm text-white ring-1 ring-white/20 backdrop-blur-sm transition-all hover:bg-white/20"
-              >
-                <BarChart3 size={16} />
-                View Stats →
-              </Link>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
 
-        {/* ✅ Tournament Flow - Contains Champion Section */}
-        <motion.div variants={itemVariants}>
-          <TournamentFlow />
+          {/* Tournament Flow */}
+          <motion.div variants={itemVariants}>
+            <TournamentFlow />
+          </motion.div>
         </motion.div>
-      </motion.div>
-    </div>
-  );
-}
-
-/* Decorative animated gradient background with blur orbs + grid overlay */
-function DecorBackground() {
-  return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
-      <div className="absolute -left-32 top-0 h-72 w-72 rounded-full bg-indigo-600/20 blur-[120px]" />
-      <div className="absolute -right-32 top-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-[120px]" />
-      <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-pink-600/10 blur-[120px]" />
-      <div
-        className="absolute inset-0 opacity-[0.15]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-        }}
-      />
-    </div>
+      </div>
+    </>
   );
 }

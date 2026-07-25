@@ -1,14 +1,40 @@
 "use client";
 
-import { Suspense, memo } from "react";
+import { Suspense, memo, useEffect,useState } from "react";
 import SignInForm from "./SignInForm";
 import { Loader2, Shield } from "lucide-react";
 
 /* -------------------------------------------------------------------------- */
-/*                            Loading Component                               */
+/*                           Performance Hooks                                */
+/* -------------------------------------------------------------------------- */
+
+// === Mobile Detection Hook ===
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                            STATIC Loading Component                       */
 /* -------------------------------------------------------------------------- */
 
 const LoadingFallback = memo(function LoadingFallback() {
+  const isMobile = useIsMobile();
+  
+  // NO animations on mobile
+  const pulseClass = isMobile ? "" : "animate-pulse";
+  const spinClass = isMobile ? "" : "animate-spin";
+
   return (
     <div className="flex min-h-screen min-h-[100dvh] items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80">
       <div className="flex flex-col items-center gap-4">
@@ -18,8 +44,8 @@ const LoadingFallback = memo(function LoadingFallback() {
             <Shield className="h-8 w-8 text-white" strokeWidth={2.2} />
           </div>
         </div>
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
-        <p className="text-sm text-gray-400 animate-pulse">Loading sign in...</p>
+        <Loader2 className={`h-8 w-8 text-indigo-400 ${spinClass}`} />
+        <p className={`text-sm text-gray-400 ${pulseClass}`}>Loading sign in...</p>
       </div>
     </div>
   );

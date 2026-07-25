@@ -1,4 +1,3 @@
-// app/news/page.tsx
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, memo } from "react";
@@ -18,6 +17,9 @@ import {
   RefreshCw,
   Share2,
   Bookmark,
+  Users,
+  MessageCircle,
+  CheckCircle,
 } from "lucide-react";
 
 /* -------------------------------------------------------------------------- */
@@ -34,6 +36,10 @@ interface NewsItem {
     name: string;
     profile?: { username?: string };
   };
+  source: "news" | "community";
+  type?: string;
+  likes?: number;
+  commentsCount?: number;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -105,7 +111,7 @@ const DecorBackground = memo(() => (
     <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/80" />
     <motion.div
       animate={{ scale: [1, 1.15, 1], opacity: [0.2, 0.35, 0.2] }}
-        transition={{ duration: 15, repeat: Infinity, ease: [0.43, 0.13, 0.23, 0.96] }}
+      transition={{ duration: 15, repeat: Infinity, ease: [0.43, 0.13, 0.23, 0.96] }}
       className="absolute -left-40 top-10 h-[500px] w-[500px] rounded-full bg-indigo-600/20 blur-[130px]"
     />
     <motion.div
@@ -139,6 +145,7 @@ const ArticleCard = memo(({ item }: ArticleCardProps) => {
   const authorName = item.author?.profile?.username || item.author?.name || "Nexus Editorial";
   const readTime = estimateReadTime(item.content);
   const categoryBadge = detectCategory(item.content);
+  const isCommunity = item.source === "community";
 
   return (
     <motion.div
@@ -147,7 +154,7 @@ const ArticleCard = memo(({ item }: ArticleCardProps) => {
       className="h-full will-change-transform"
     >
       <Link
-        href={`/news/${item.id}`}
+        href={isCommunity ? `/dashboard/community` : `/news/${item.id}`}
         className="group relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.06] via-white/[0.03] to-white/[0.01] shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1.5 hover:border-indigo-500/40 hover:bg-white/[0.09] hover:shadow-[0_12px_40px_0_rgba(79,70,229,0.2)]"
       >
         {/* Subtle Top Accent Reflection */}
@@ -164,8 +171,23 @@ const ArticleCard = memo(({ item }: ArticleCardProps) => {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/20 to-transparent" />
               
+              {/* Source Badge */}
+              <div className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur-md shadow-sm">
+                {isCommunity ? (
+                  <>
+                    <Users className="h-3 w-3 text-green-400" />
+                    <span className="text-green-300">Community Post</span>
+                  </>
+                ) : (
+                  <>
+                    <Newspaper className="h-3 w-3 text-indigo-400" />
+                    <span className="text-indigo-300">News</span>
+                  </>
+                )}
+              </div>
+
               {/* Floating Category Pill */}
-              <div className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-300 backdrop-blur-md shadow-sm">
+              <div className="absolute left-4 top-12 z-10 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-300 backdrop-blur-md shadow-sm">
                 <Tag className="h-3 w-3 text-indigo-400" />
                 {categoryBadge}
               </div>
@@ -175,18 +197,46 @@ const ArticleCard = memo(({ item }: ArticleCardProps) => {
                 <Clock className="h-3 w-3 text-gray-400" />
                 {readTime} min read
               </div>
+
+              {/* Community Post Badge */}
+              {isCommunity && (
+                <div className="absolute right-4 top-12 z-10 flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/20 px-2.5 py-1 text-[10px] font-medium text-green-300 backdrop-blur-md">
+                  <CheckCircle className="h-3 w-3" />
+                  Approved
+                </div>
+              )}
             </div>
           ) : (
             <div className="relative flex h-40 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-indigo-900/40 via-purple-900/20 to-gray-900 sm:h-48">
               <div className="absolute inset-0 bg-[radial-gradient(#818cf8_1px,transparent_1px)] opacity-20 [background-size:16px_16px]" />
-              <div className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-300 backdrop-blur-md">
+              
+              {/* Source Badge */}
+              <div className="absolute left-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider backdrop-blur-md shadow-sm">
+                {isCommunity ? (
+                  <>
+                    <Users className="h-3 w-3 text-green-400" />
+                    <span className="text-green-300">Community Post</span>
+                  </>
+                ) : (
+                  <>
+                    <Newspaper className="h-3 w-3 text-indigo-400" />
+                    <span className="text-indigo-300">News</span>
+                  </>
+                )}
+              </div>
+
+              {/* Category Badge */}
+              <div className="absolute left-4 top-12 z-10 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-300 backdrop-blur-md shadow-sm">
                 <Tag className="h-3 w-3 text-indigo-400" />
                 {categoryBadge}
               </div>
+
+              {/* Read Time */}
               <div className="absolute right-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[11px] font-medium text-gray-300 backdrop-blur-md">
                 <Clock className="h-3 w-3 text-gray-400" />
                 {readTime} min read
               </div>
+
               <Newspaper className="h-14 w-14 text-indigo-400/30 transition-transform duration-500 group-hover:scale-110 group-hover:text-indigo-400/50" />
             </div>
           )}
@@ -208,6 +258,16 @@ const ArticleCard = memo(({ item }: ArticleCardProps) => {
                 </div>
                 {authorName}
               </span>
+              {isCommunity && item.likes !== undefined && (
+                <span className="flex items-center gap-1 text-rose-400">
+                  ❤️ {item.likes}
+                </span>
+              )}
+              {isCommunity && item.commentsCount !== undefined && (
+                <span className="flex items-center gap-1 text-blue-400">
+                  💬 {item.commentsCount}
+                </span>
+              )}
             </div>
 
             <h2 className="line-clamp-2 text-xl font-bold tracking-tight text-white transition-colors duration-200 group-hover:text-indigo-300 sm:text-2xl">
@@ -223,7 +283,7 @@ const ArticleCard = memo(({ item }: ArticleCardProps) => {
         {/* Article Card Footer Action */}
         <div className="flex items-center justify-between border-t border-white/[0.06] bg-white/[0.01] px-5 py-3.5 sm:px-6">
           <span className="inline-flex items-center gap-2 text-sm font-bold text-indigo-400 transition-colors group-hover:text-indigo-300">
-            Read Full Dispatch
+            {isCommunity ? "View in Community" : "Read Full Dispatch"}
             <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
           </span>
           <span className="rounded-full bg-white/[0.04] p-1.5 text-gray-400 transition-colors group-hover:bg-indigo-500/20 group-hover:text-indigo-300">
@@ -242,39 +302,104 @@ ArticleCard.displayName = "ArticleCard";
 /* -------------------------------------------------------------------------- */
 
 export default function NewsPage() {
-  const [news, setNews] = useState<NewsItem[]>([]);
+  const [items, setItems] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "news" | "community">("all");
 
-  const fetchNews = useCallback(async () => {
+  const fetchContent = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/news");
-      const data = await res.json();
-      setNews(Array.isArray(data) ? data : []);
+      // ✅ Fetch both news and community posts in parallel
+      const [newsRes, communityRes] = await Promise.all([
+        fetch("/api/news"),
+        fetch("/api/community/posts"),
+      ]);
+
+      const newsData = await newsRes.json();
+      const communityData = await communityRes.json();
+
+      // ✅ Format news articles
+      const newsItems: NewsItem[] = Array.isArray(newsData) 
+        ? newsData.map((item: any) => ({
+            ...item,
+            source: "news" as const,
+            publishedAt: item.publishedAt || item.createdAt,
+          }))
+        : [];
+
+      // ✅ Format community posts (only APPROVED ones)
+      let communityPosts: any[] = [];
+      if (Array.isArray(communityData)) {
+        communityPosts = communityData;
+      } else if (communityData.posts && Array.isArray(communityData.posts)) {
+        communityPosts = communityData.posts;
+      }
+
+      const communityItems: NewsItem[] = communityPosts
+        .filter((post: any) => post.status === "APPROVED")
+        .map((post: any) => ({
+          id: post.id,
+          title: post.content.slice(0, 60) + (post.content.length > 60 ? "..." : ""),
+          content: post.content,
+          image: post.image,
+          publishedAt: post.createdAt,
+          author: {
+            name: post.user?.name || "Community Member",
+            profile: {
+              username: post.user?.profile?.username || "Player",
+            },
+          },
+          source: "community" as const,
+          type: post.type || "GENERAL",
+          likes: post.likes || 0,
+          commentsCount: post._count?.comments || 0,
+        }));
+
+      // ✅ Combine and sort by date (newest first)
+      const combined = [...newsItems, ...communityItems].sort(
+        (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      );
+
+      setItems(combined);
     } catch (error) {
-      console.error("Failed to fetch news:", error);
+      console.error("Failed to fetch content:", error);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchNews();
-  }, [fetchNews]);
+    fetchContent();
+  }, [fetchContent]);
 
-  const categories = useMemo(
-    () => ["all", "Announcements", "Match Reports", "Tournaments", "Community"],
-    []
-  );
+  // ✅ Extract unique categories from combined content
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    items.forEach((item) => {
+      const cat = detectCategory(item.content);
+      cats.add(cat);
+    });
+    return ["all", ...Array.from(cats)];
+  }, [items]);
 
-  const filteredNews = useMemo(() => {
-    if (selectedCategory === "all") return news;
-    return news.filter((item) =>
-      item.content?.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-      item.title?.toLowerCase().includes(selectedCategory.toLowerCase())
-    );
-  }, [news, selectedCategory]);
+  const filteredItems = useMemo(() => {
+    let result = items;
+    
+    // Filter by source
+    if (sourceFilter !== "all") {
+      result = result.filter((item) => item.source === sourceFilter);
+    }
+    
+    // Filter by category
+    if (selectedCategory !== "all") {
+      result = result.filter((item) => 
+        detectCategory(item.content) === selectedCategory
+      );
+    }
+    
+    return result;
+  }, [items, sourceFilter, selectedCategory]);
 
   // Loading Skeleton View
   if (loading) {
@@ -345,51 +470,64 @@ export default function NewsPage() {
             </div>
 
             <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Latest News &amp; League Updates
+              Latest News &amp; Community Updates
             </h1>
 
             <p className="mx-auto mt-3 max-w-2xl text-sm font-medium leading-relaxed text-gray-300 sm:mt-4 sm:text-base">
-              Stay up to date with official season announcements, tactical match reports, tournament brackets, and spotlight stories from our vibrant competitive community.
+              Stay up to date with official season announcements, tactical match reports, tournament brackets, and community posts from fellow players.
             </p>
           </motion.div>
 
           {/* ===================================================================== */}
-          {/* 2. Category Filter Bar (Touch-Friendly min 44px targets)              */}
+          {/* 2. Filter Bar                                                        */}
           {/* ===================================================================== */}
           <motion.div
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
-            className="mb-10 flex flex-wrap items-center justify-center gap-2 sm:mb-12 sm:gap-3"
+            className="mb-6 flex flex-wrap items-center justify-center gap-2 sm:mb-8 sm:gap-3"
           >
-            {categories.map((cat) => {
-              const isSelected = selectedCategory === cat;
-              return (
+            {/* Source Filter */}
+            <div className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] p-1">
+              {(["all", "news", "community"] as const).map((source) => (
+                <button
+                  key={source}
+                  onClick={() => setSourceFilter(source)}
+                  className={`min-h-[36px] rounded-full px-4 py-1.5 text-xs font-bold tracking-wide transition-all duration-300 ${
+                    sourceFilter === source
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-[0_4px_20px_rgba(79,70,229,0.35)]"
+                      : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {source === "all" ? "All" : source === "news" ? "📰 News" : "👥 Community"}
+                </button>
+              ))}
+            </div>
+
+            <div className="h-6 w-px bg-white/10" />
+
+            {/* Category Filter */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`group relative flex min-h-[44px] items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold tracking-wide transition-all duration-300 ${
-                    isSelected
-                      ? "border border-indigo-400/50 bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-[0_4px_20px_rgba(79,70,229,0.35)] scale-105"
+                  className={`min-h-[36px] rounded-full px-4 py-1.5 text-xs font-bold tracking-wide transition-all duration-300 ${
+                    selectedCategory === cat
+                      ? "border border-indigo-400/50 bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-[0_4px_20px_rgba(79,70,229,0.35)]"
                       : "border border-white/[0.08] bg-white/[0.04] text-gray-300 backdrop-blur-md hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
                   }`}
                 >
-                  <Filter className={`h-3.5 w-3.5 transition-transform duration-300 ${isSelected ? "text-white" : "text-gray-400 group-hover:text-indigo-400"}`} />
-                  <span>{cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
-                  {isSelected && (
-                    <span className="ml-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black text-white">
-                      {filteredNews.length}
-                    </span>
-                  )}
+                  {cat === "all" ? "All Categories" : cat}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </motion.div>
 
           {/* ===================================================================== */}
-          {/* 3. News Grid / Empty State                                            */}
+          {/* 3. Content Grid / Empty State                                         */}
           {/* ===================================================================== */}
-          {filteredNews.length === 0 ? (
+          {filteredItems.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -400,16 +538,21 @@ export default function NewsPage() {
                 <Newspaper className="h-8 w-8 sm:h-10 sm:w-10" />
               </div>
               <h3 className="mt-5 text-xl font-extrabold text-white sm:text-2xl">
-                No Articles Found
+                No Content Found
               </h3>
               <p className="mt-2 text-sm text-gray-400">
-                We couldn&apos;t find any publications matching &ldquo;<span className="font-semibold text-white">{selectedCategory}</span>&rdquo;. Check back soon or select another filter.
+                {sourceFilter !== "all"
+                  ? `No ${sourceFilter} content available matching your filters.`
+                  : "No news articles or community posts available yet. Check back soon!"}
               </p>
               <button
-                onClick={() => setSelectedCategory("all")}
+                onClick={() => {
+                  setSelectedCategory("all");
+                  setSourceFilter("all");
+                }}
                 className="mt-6 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:from-indigo-500 hover:to-purple-500"
               >
-                Reset Filter
+                Reset Filters
               </button>
             </motion.div>
           ) : (
@@ -421,8 +564,8 @@ export default function NewsPage() {
               className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 sm:gap-8 items-stretch"
             >
               <AnimatePresence mode="popLayout">
-                {filteredNews.map((item) => (
-                  <ArticleCard key={item.id} item={item} />
+                {filteredItems.map((item) => (
+                  <ArticleCard key={`${item.source}-${item.id}`} item={item} />
                 ))}
               </AnimatePresence>
             </motion.div>
@@ -438,7 +581,8 @@ export default function NewsPage() {
                   <TrendingUp className="h-4 w-4" />
                 </div>
                 <span>
-                  Showing <strong className="text-white">{filteredNews.length}</strong> of <strong className="text-white">{news.length}</strong> total articles published
+                  Showing <strong className="text-white">{filteredItems.length}</strong> of{" "}
+                  <strong className="text-white">{items.length}</strong> total items
                 </span>
               </div>
               
@@ -447,6 +591,13 @@ export default function NewsPage() {
                   <Clock className="h-3.5 w-3.5 text-indigo-400" />
                   Last updated: {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                 </span>
+                <button
+                  onClick={fetchContent}
+                  className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </button>
               </div>
             </div>
           </div>

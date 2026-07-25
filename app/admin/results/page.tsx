@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback, memo } from "react";
 import { useSession } from "next-auth/react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle,
   XCircle,
@@ -11,7 +11,6 @@ import {
   Trophy,
   Users,
   Calendar,
-  Image as ImageIcon,
   Search,
   Filter,
   Sparkles,
@@ -20,13 +19,29 @@ import {
   Flame,
   ChevronRight,
   Loader2,
-  ZoomIn,
   FileImage,
   X,
+  ChevronLeft,
+  ChevronDown,
+  RefreshCw,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Printer,
+  CheckSquare,
+  Square,
+  ChevronDown as ChevronDownIcon,
+  Calendar as CalendarIcon,
+  BarChart3,
+  TrendingUp,
+  History,
+  UserCheck,
+  Clock as ClockIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Image from "next/image";
 import { Skeleton } from "@/components/ui/Skeleton";
+import ResultCard from "@/components/admin/ResultCard";
 
 interface PendingResult {
   id: string;
@@ -60,39 +75,23 @@ interface PendingResult {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                            Animation Variants                              */
+/*                           Performance Hooks                                */
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.03 },
-  },
-};
-
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: "easeOut" },
-  },
-};
-
-const statCardVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-  hover: {
-    y: -4,
-    scale: 1.02,
-    transition: { type: "spring", stiffness: 300, damping: 20 },
-  },
-};
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+  
+  return isMobile;
+}
 
 /* -------------------------------------------------------------------------- */
 /*                            Helper Functions                                */
@@ -112,224 +111,85 @@ function isToday(date: string) {
   );
 }
 
+function formatDate(date: string) {
+  return new Date(date).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 /* -------------------------------------------------------------------------- */
-/*                            Memoized Components                             */
+/*                           STATIC Background                               */
 /* -------------------------------------------------------------------------- */
 
-const StatCard = memo(({ stat }: { stat: any }) => (
-  <motion.div
-    variants={statCardVariants}
-    initial="hidden"
-    animate="visible"
-    whileHover="hover"
-    className="will-change-transform"
-  >
-    <div className={`group relative h-full overflow-hidden rounded-2xl border bg-white/5 p-4 shadow-xl backdrop-blur-xl transition-colors hover:border-orange-500/40 ${stat.ring}`}>
-      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-500 group-hover:opacity-70`} />
-      <div className="relative flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className={`text-2xl font-bold ${stat.accent}`}>{stat.value}</p>
-          <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
-        </div>
-        <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 ${stat.accent}`}>
-          <stat.icon className="h-5 w-5" />
-        </span>
-      </div>
-      <p className="relative mt-2 truncate text-[11px] text-gray-500">{stat.hint}</p>
-    </div>
-  </motion.div>
-));
-
-StatCard.displayName = "StatCard";
-
-const ResultCard = memo(({ result, onApprove, onReject, onViewEvidence }: {
-  result: PendingResult;
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
-  onViewEvidence: (image: string) => void;
-}) => {
-  const isPending = !result.approved;
-  const isTournament = !result.fixture && result.tournamentMatch;
-  const homeName = result.fixture
-    ? playerName(result.fixture.homePlayer)
-    : playerName(result.tournamentMatch?.homePlayer);
-  const awayName = result.fixture
-    ? playerName(result.fixture.awayPlayer)
-    : playerName(result.tournamentMatch?.awayPlayer);
-  const submittedBy = result.user?.profile?.username || result.user?.name || result.user?.email || "Unknown";
-  const matchDate = result.fixture?.scheduledDate || result.createdAt;
+const DecorBackground = memo(() => {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return (
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950" />
+    );
+  }
 
   return (
-    <motion.div
-      variants={itemVariants}
-      whileHover={{ y: -3 }}
-      transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className={`group relative overflow-hidden rounded-2xl border bg-white/5 shadow-xl backdrop-blur-xl transition-colors ${
-        isPending
-          ? "border-yellow-500/20 hover:border-yellow-500/50"
-          : "border-green-500/15 hover:border-green-500/40"
-      }`}
-    >
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
+      <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-orange-600/20 blur-3xl" />
+      <div className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-red-600/15 blur-3xl" />
+      <div className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl" />
       <div
-        className={`h-1 ${
-          isPending
-            ? "bg-gradient-to-r from-yellow-500 to-orange-500"
-            : "bg-gradient-to-r from-green-500 to-emerald-500"
-        }`}
+        className="absolute inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
       />
-
-      <div className="p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${
-              isTournament
-                ? "border-purple-400/20 bg-purple-500/15 text-purple-300"
-                : "border-blue-400/20 bg-blue-500/15 text-blue-300"
-            }`}
-          >
-            <Trophy size={12} />
-            {isTournament ? "Tournament" : "League"}
-          </span>
-          {isTournament && (
-            <span className="rounded-full border border-white/10 bg-gray-900/40 px-2.5 py-1 text-xs text-gray-400">
-              {result.tournamentMatch?.tournament?.name || "Match"}
-            </span>
-          )}
-          <span
-            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${
-              isPending
-                ? "border-yellow-400/20 bg-yellow-500/15 text-yellow-300"
-                : "border-green-400/20 bg-green-500/15 text-green-300"
-            }`}
-          >
-            {isPending ? <Clock size={12} /> : <CheckCircle size={12} />}
-            {isPending ? "Pending" : "Approved"}
-          </span>
-        </div>
-
-        {/* Match display */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 flex-1 flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-gray-900/40 p-3">
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 font-bold text-white">
-                {homeName.charAt(0).toUpperCase()}
-              </span>
-              <span className="truncate font-semibold text-white">{homeName}</span>
-            </div>
-
-            <div className="flex items-center justify-center gap-3 rounded-2xl border border-white/10 bg-gray-950/50 px-5 py-3 shadow-inner">
-              <span className="text-2xl font-black text-white sm:text-3xl">{result.homeScore}</span>
-              <span className="text-gray-500">-</span>
-              <span className="text-2xl font-black text-white sm:text-3xl">{result.awayScore}</span>
-            </div>
-
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-gray-900/40 p-3 sm:justify-end">
-              <span className="truncate font-semibold text-white">{awayName}</span>
-              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500 font-bold text-white">
-                {awayName.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Meta */}
-        <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-gray-400 md:grid-cols-3">
-          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-gray-900/30 px-3 py-2">
-            <Calendar size={14} className="flex-shrink-0 text-orange-300" />
-            <span className="truncate">{new Date(matchDate).toLocaleDateString()}</span>
-          </div>
-          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-gray-900/30 px-3 py-2">
-            <Users size={14} className="flex-shrink-0 text-blue-300" />
-            <span className="truncate">Submitted by: {submittedBy}</span>
-          </div>
-          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-gray-900/30 px-3 py-2">
-            <Clock size={14} className="flex-shrink-0 text-gray-400" />
-            <span className="truncate">{new Date(result.createdAt).toLocaleString()}</span>
-          </div>
-        </div>
-
-        {/* Evidence + actions */}
-        <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            {result.evidenceImage ? (
-              <button
-                onClick={() => onViewEvidence(result.evidenceImage)}
-                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-4 text-sm font-medium text-indigo-300 transition-colors hover:bg-indigo-500/20"
-              >
-                <FileImage size={16} />
-                View Evidence
-                <Eye size={14} />
-              </button>
-            ) : (
-              <span className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-white/10 bg-gray-900/40 px-4 text-sm text-gray-500">
-                <AlertTriangle size={16} />
-                No evidence attached
-              </span>
-            )}
-          </div>
-
-          {isPending && (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                onClick={() => onApprove(result.id)}
-                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 text-sm font-semibold text-white shadow-lg shadow-green-900/30 transition-all hover:from-green-700 hover:to-emerald-700"
-              >
-                <CheckCircle size={16} />
-                Approve Result
-              </button>
-              <button
-                onClick={() => onReject(result.id)}
-                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-600/15 px-4 text-sm font-semibold text-red-300 transition-all hover:bg-red-600/25"
-              >
-                <XCircle size={16} />
-                Reject
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
+    </div>
   );
 });
-
-ResultCard.displayName = "ResultCard";
-
-/* -------------------------------------------------------------------------- */
-/*                            Background Component                            */
-/* -------------------------------------------------------------------------- */
-
-const DecorBackground = memo(() => (
-  <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950">
-    <motion.div
-      animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-orange-600/20 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1.1, 1, 1.1], opacity: [0.3, 0.5, 0.3] }}
-      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-red-600/15 blur-3xl"
-    />
-    <motion.div
-      animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
-      transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute bottom-0 left-1/3 h-96 w-96 rounded-full bg-purple-600/15 blur-3xl"
-    />
-    <div
-      className="absolute inset-0 opacity-[0.15]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
-    />
-  </div>
-));
 
 DecorBackground.displayName = "DecorBackground";
 
 /* -------------------------------------------------------------------------- */
-/*                            Filter Button Component                         */
+/*                           STATIC Stat Card                                 */
+/* -------------------------------------------------------------------------- */
+
+const StatCard = memo(({ stat, isLoading }: { stat: any; isLoading?: boolean }) => {
+  const Icon = stat.icon;
+  
+  if (isLoading) {
+    return (
+      <div className="h-full rounded-2xl border bg-white/5 p-3 shadow-xl backdrop-blur-xl sm:p-4">
+        <div className="animate-pulse space-y-2">
+          <div className="h-8 w-16 rounded bg-white/10" />
+          <div className="h-4 w-24 rounded bg-white/5" />
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`group relative h-full overflow-hidden rounded-2xl border bg-white/5 p-3 shadow-xl backdrop-blur-xl transition-colors duration-150 hover:border-orange-500/40 sm:p-4 ${stat.ring}`}>
+      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${stat.glow} to-transparent opacity-40 blur-2xl transition-opacity duration-300 group-hover:opacity-70`} />
+      <div className="relative flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`text-xl font-bold sm:text-2xl ${stat.accent}`}>{stat.value}</p>
+          <p className="mt-0.5 truncate text-xs text-gray-400 sm:text-sm">{stat.label}</p>
+        </div>
+        <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 sm:h-10 sm:w-10 ${stat.accent}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+        </span>
+      </div>
+      <p className="relative mt-2 truncate text-[10px] text-gray-500 sm:text-[11px]">{stat.hint}</p>
+    </div>
+  );
+});
+
+StatCard.displayName = "StatCard";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Filter Button                            */
 /* -------------------------------------------------------------------------- */
 
 const FilterButton = memo(({ button, filter, setFilter }: {
@@ -343,7 +203,7 @@ const FilterButton = memo(({ button, filter, setFilter }: {
   return (
     <button
       onClick={() => setFilter(button.value)}
-      className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all sm:px-4 sm:text-sm ${
+      className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors duration-150 sm:px-4 sm:text-sm ${
         isActive ? button.active : "text-gray-400 hover:bg-white/5 hover:text-white"
       }`}
     >
@@ -357,45 +217,342 @@ const FilterButton = memo(({ button, filter, setFilter }: {
 FilterButton.displayName = "FilterButton";
 
 /* -------------------------------------------------------------------------- */
-/*                            Evidence Modal                                  */
+/*                           STATIC Evidence Modal                           */
 /* -------------------------------------------------------------------------- */
 
-const EvidenceModal = memo(({ image, onClose }: { image: string; onClose: () => void }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-3 backdrop-blur-sm sm:p-4"
-    onClick={onClose}
-  >
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 18 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 18 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      className="relative max-h-[92vh] w-full max-w-5xl rounded-2xl border border-white/10 bg-gray-900/80 p-3 shadow-2xl backdrop-blur-xl sm:p-4"
-      onClick={(e) => e.stopPropagation()}
+const EvidenceModal = memo(({ image, onClose }: { image: string; onClose: () => void }) => {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-3 backdrop-blur-sm sm:p-4"
+      onClick={onClose}
     >
-      <button
-        onClick={onClose}
-        className="absolute -top-12 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-white transition-all hover:bg-white/10 hover:text-gray-300 sm:-top-14"
-        aria-label="Close evidence preview"
+      <div
+        className="relative max-h-[92vh] w-full max-w-5xl rounded-2xl border border-white/10 bg-gray-900/80 p-3 shadow-2xl backdrop-blur-xl sm:p-4"
+        onClick={(e) => e.stopPropagation()}
       >
-        <X size={24} />
-      </button>
-      <Image
-        src={`data:image/png;base64,${image}`}
-        alt="Evidence"
-        width={1000}
-        height={750}
-        className="max-h-[85vh] w-full rounded-xl object-contain"
-        loading="lazy"
-      />
-    </motion.div>
-  </motion.div>
-));
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-white transition-colors duration-150 hover:bg-white/10 hover:text-gray-300 sm:-top-14"
+          aria-label="Close evidence preview"
+        >
+          <X size={24} />
+        </button>
+        <Image
+          src={`data:image/png;base64,${image}`}
+          alt="Evidence"
+          width={1000}
+          height={750}
+          className="max-h-[85vh] w-full rounded-xl object-contain"
+          loading="lazy"
+          decoding="async"
+          sizes="(max-width: 768px) 100vw, 80vw"
+        />
+      </div>
+    </div>
+  );
+});
 
 EvidenceModal.displayName = "EvidenceModal";
+
+/* -------------------------------------------------------------------------- */
+/*                           STATIC Pagination                               */
+/* -------------------------------------------------------------------------- */
+
+const Pagination = memo(({ currentPage, totalPages, onPageChange }: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) => {
+  if (totalPages <= 1) return null;
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      
+      let start = Math.max(2, currentPage - 1);
+      let end = Math.min(totalPages - 1, currentPage + 1);
+      
+      if (currentPage <= 2) {
+        end = 4;
+      }
+      if (currentPage >= totalPages - 1) {
+        start = totalPages - 3;
+      }
+      
+      if (start > 2) {
+        pages.push('...');
+      }
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      
+      if (end < totalPages - 1) {
+        pages.push('...');
+      }
+      pages.push(totalPages);
+    }
+    
+    return pages;
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-white/10 bg-gray-900/40 px-3 text-sm text-gray-400 transition-colors duration-150 hover:bg-gray-800/60 hover:text-white disabled:opacity-50 disabled:hover:bg-gray-900/40"
+      >
+        <ChevronLeft size={16} />
+        <span className="hidden sm:inline ml-1">Prev</span>
+      </button>
+
+      {getPageNumbers().map((page, index) => (
+        <button
+          key={index}
+          onClick={() => typeof page === 'number' && onPageChange(page)}
+          disabled={page === '...'}
+          className={`min-h-[40px] min-w-[40px] rounded-lg text-sm font-medium transition-colors duration-150 ${
+            page === currentPage
+              ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-500/30'
+              : page === '...'
+              ? 'text-gray-500 cursor-default'
+              : 'text-gray-400 hover:bg-white/10 hover:text-white'
+          }`}
+        >
+          {page}
+        </button>
+      ))}
+
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-white/10 bg-gray-900/40 px-3 text-sm text-gray-400 transition-colors duration-150 hover:bg-gray-800/60 hover:text-white disabled:opacity-50 disabled:hover:bg-gray-900/40"
+      >
+        <span className="hidden sm:inline mr-1">Next</span>
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+});
+
+Pagination.displayName = "Pagination";
+
+/* -------------------------------------------------------------------------- */
+/*                           Bulk Action Bar                                  */
+/* -------------------------------------------------------------------------- */
+
+const BulkActionBar = memo(({ 
+  selectedCount, 
+  totalCount, 
+  onSelectAll, 
+  onDeselectAll, 
+  onApproveSelected, 
+  onRejectSelected, 
+  isApproving,
+  isRejecting 
+}: {
+  selectedCount: number;
+  totalCount: number;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
+  onApproveSelected: () => void;
+  onRejectSelected: () => void;
+  isApproving: boolean;
+  isRejecting: boolean;
+}) => {
+  const isAllSelected = selectedCount === totalCount && totalCount > 0;
+  const isSomeSelected = selectedCount > 0;
+
+  if (!isSomeSelected && !isAllSelected) {
+    return (
+      <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-gray-900/40 p-3">
+        <span className="text-xs text-gray-400">Select results to perform bulk actions</span>
+        <button
+          onClick={onSelectAll}
+          className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+        >
+          Select All
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={isAllSelected ? onDeselectAll : onSelectAll}
+          className="flex items-center gap-1.5 text-xs font-medium text-indigo-300 hover:text-indigo-200"
+        >
+          {isAllSelected ? <CheckCircle size={16} /> : <Square size={16} />}
+          {isAllSelected ? 'Deselect All' : 'Select All'}
+        </button>
+        <span className="text-xs text-gray-300">
+          {selectedCount} of {totalCount} selected
+        </span>
+      </div>
+      
+      <div className="flex gap-2">
+        <button
+          onClick={onApproveSelected}
+          disabled={isApproving || selectedCount === 0}
+          className="flex min-h-[36px] items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 px-3 text-xs font-semibold text-white shadow-lg shadow-green-900/30 transition-all hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
+        >
+          {isApproving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+          Approve ({selectedCount})
+        </button>
+        <button
+          onClick={onRejectSelected}
+          disabled={isRejecting || selectedCount === 0}
+          className="flex min-h-[36px] items-center justify-center gap-1.5 rounded-lg border border-red-500/30 bg-red-600/15 px-3 text-xs font-semibold text-red-300 transition-colors hover:bg-red-600/25 disabled:opacity-50"
+        >
+          {isRejecting ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+          Reject ({selectedCount})
+        </button>
+        <button
+          onClick={onDeselectAll}
+          className="flex min-h-[36px] items-center justify-center rounded-lg border border-white/10 bg-gray-800/50 px-3 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-700/50 hover:text-white"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  );
+});
+
+BulkActionBar.displayName = "BulkActionBar";
+
+/* -------------------------------------------------------------------------- */
+/*                           Advanced Filters                                 */
+/* -------------------------------------------------------------------------- */
+
+const AdvancedFilters = memo(({ 
+  dateRange, 
+  setDateRange, 
+  seasonFilter, 
+  setSeasonFilter,
+  seasons,
+  showFilters,
+  onClose
+}: {
+  dateRange: { from: string; to: string };
+  setDateRange: (range: { from: string; to: string }) => void;
+  seasonFilter: string;
+  setSeasonFilter: (season: string) => void;
+  seasons: { id: string; name: string }[];
+  showFilters: boolean;
+  onClose: () => void;
+}) => {
+  if (!showFilters) return null;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-gray-900/60 p-4 backdrop-blur-xl">
+      <div className="flex flex-wrap gap-4">
+        <div className="flex-1 min-w-[150px]">
+          <label className="text-xs font-medium text-gray-400">Date From</label>
+          <input
+            type="date"
+            value={dateRange.from}
+            onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+            className="mt-1 min-h-[40px] w-full rounded-lg border border-white/10 bg-gray-900/50 px-3 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+          />
+        </div>
+        <div className="flex-1 min-w-[150px]">
+          <label className="text-xs font-medium text-gray-400">Date To</label>
+          <input
+            type="date"
+            value={dateRange.to}
+            onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+            className="mt-1 min-h-[40px] w-full rounded-lg border border-white/10 bg-gray-900/50 px-3 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+          />
+        </div>
+        <div className="flex-1 min-w-[150px]">
+          <label className="text-xs font-medium text-gray-400">Season</label>
+          <select
+            value={seasonFilter}
+            onChange={(e) => setSeasonFilter(e.target.value)}
+            className="mt-1 min-h-[40px] w-full rounded-lg border border-white/10 bg-gray-900/50 px-3 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+          >
+            <option value="all">All Seasons</option>
+            {seasons.map((season) => (
+              <option key={season.id} value={season.id}>{season.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-end">
+          <button
+            onClick={onClose}
+            className="min-h-[40px] rounded-lg bg-gray-700/50 px-4 text-sm text-gray-300 transition-colors hover:bg-gray-600/50"
+          >
+            Close Filters
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+AdvancedFilters.displayName = "AdvancedFilters";
+
+/* -------------------------------------------------------------------------- */
+/*                           Export Dropdown                                  */
+/* -------------------------------------------------------------------------- */
+
+const ExportDropdown = memo(({ onExport }: { onExport: (format: 'csv' | 'pdf' | 'print') => void }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-gray-800/60 px-3.5 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700/60"
+      >
+        <Download size={16} />
+        <span className="hidden sm:inline">Export</span>
+        <ChevronDownIcon size={14} className={isOpen ? 'rotate-180' : ''} />
+      </button>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-white/10 bg-gray-800 shadow-2xl backdrop-blur-xl">
+            <button
+              onClick={() => { onExport('csv'); setIsOpen(false); }}
+              className="flex min-h-[44px] w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <FileSpreadsheet size={16} />
+              Export as CSV
+            </button>
+            <button
+              onClick={() => { onExport('pdf'); setIsOpen(false); }}
+              className="flex min-h-[44px] w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <FileText size={16} />
+              Export as PDF
+            </button>
+            <button
+              onClick={() => { onExport('print'); setIsOpen(false); }}
+              className="flex min-h-[44px] w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <Printer size={16} />
+              Print
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
+ExportDropdown.displayName = "ExportDropdown";
 
 /* -------------------------------------------------------------------------- */
 /*                            Main Component                                  */
@@ -403,104 +560,352 @@ EvidenceModal.displayName = "EvidenceModal";
 
 export default function AdminResultsPage() {
   const { data: session } = useSession();
-  const [results, setResults] = useState<PendingResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "pending" | "approved">("pending");
   const [searchTerm, setSearchTerm] = useState("");
-  const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedResults, setSelectedResults] = useState<string[]>([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [dateRange, setDateRange] = useState({ from: '', to: '' });
+  const [seasonFilter, setSeasonFilter] = useState('all');
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
+  const [isBulkRejecting, setIsBulkRejecting] = useState(false);
 
-  useEffect(() => {
-    fetchResults();
+  // ✅ OPTIMIZED: Fetch results with caching
+  const {
+    data: resultsData,
+    isLoading,
+    refetch,
+  } = useQuery({
+    queryKey: ["admin-results", filter, currentPage, searchTerm, dateRange, seasonFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', pageSize.toString());
+      params.append('filter', filter);
+      if (searchTerm) params.append('search', searchTerm);
+      if (dateRange.from) params.append('dateFrom', dateRange.from);
+      if (dateRange.to) params.append('dateTo', dateRange.to);
+      if (seasonFilter !== 'all') params.append('seasonId', seasonFilter);
+
+      const res = await fetch(`/api/admin/results?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch results");
+      return res.json();
+    },
+    staleTime: 30000, // ✅ 30 seconds cache
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    placeholderData: (previousData: any) => previousData, // ✅ Keep old data
+  });
+
+  // ✅ OPTIMIZED: Fetch stats with caching
+  // ✅ Fetch stats - Independent of filter!
+const { data: totalStats, isLoading: statsLoading } = useQuery({
+  queryKey: ["admin-results-stats", searchTerm, dateRange, seasonFilter], // ✅ Remove 'filter' from key
+  queryFn: async () => {
+    const params = new URLSearchParams();
+    // ✅ Don't send filter - we want ALL stats
+    // params.append('filter', filter); // ❌ Remove this
+    if (searchTerm) params.append('search', searchTerm);
+    if (dateRange.from) params.append('dateFrom', dateRange.from);
+    if (dateRange.to) params.append('dateTo', dateRange.to);
+    if (seasonFilter !== 'all') params.append('seasonId', seasonFilter);
+    
+    const res = await fetch(`/api/admin/results/stats?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to fetch stats");
+    return res.json();
+  },
+  staleTime: 60000,
+  gcTime: 5 * 60 * 1000,
+  refetchOnMount: true,
+  refetchOnWindowFocus: true,
+  placeholderData: { total: 0, pending: 0, approved: 0, today: 0 },
+});
+
+  // ✅ OPTIMIZED: Fetch seasons with longer cache
+  const { data: seasons = [] } = useQuery({
+    queryKey: ["admin-seasons"],
+    queryFn: async () => {
+      const res = await fetch(`/api/seasons`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // ✅ 5 minutes cache
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const results = resultsData?.results || [];
+  const totalResults = resultsData?.total || 0;
+  const totalPages = Math.ceil(totalResults / pageSize);
+
+  const totalPending = totalStats?.pending || 0;
+  const totalApproved = totalStats?.approved || 0;
+  const totalToday = totalStats?.today || 0;
+  const totalAll = totalStats?.total || 0;
+
+  // ✅ Toggle selection
+  const toggleSelection = useCallback((resultId: string) => {
+    setSelectedResults(prev => 
+      prev.includes(resultId) 
+        ? prev.filter(id => id !== resultId) 
+        : [...prev, resultId]
+    );
   }, []);
 
-  async function fetchResults() {
-    const res = await fetch("/api/admin/results");
-    const data = await res.json();
-    setResults(Array.isArray(data) ? data : []);
-    setLoading(false);
-  }
+  // ✅ Select all on current page
+  const selectAll = useCallback(() => {
+    const allIds = results.map((r: any) => r.id);
+    setSelectedResults(allIds);
+  }, [results]);
 
-  const approveResult = useCallback(async (resultId: string) => {
-    setApprovingId(resultId);
+  // ✅ Deselect all
+  const deselectAll = useCallback(() => {
+    setSelectedResults([]);
+  }, []);
+
+  // ✅ Bulk approve
+  const bulkApprove = useCallback(async () => {
+    if (selectedResults.length === 0) return;
+    if (!confirm(`Approve ${selectedResults.length} results?`)) return;
+
+    setIsBulkApproving(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const resultId of selectedResults) {
+      try {
+        const res = await fetch("/api/admin/results/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resultId }),
+        });
+        if (res.ok) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    toast.success(`✅ Approved ${successCount} results${failCount > 0 ? `, ${failCount} failed` : ''}`);
+    setSelectedResults([]);
+    setIsBulkApproving(false);
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["admin-results-stats"] });
+  }, [selectedResults, refetch, queryClient]);
+
+  // ✅ Bulk reject
+  const bulkReject = useCallback(async () => {
+    if (selectedResults.length === 0) return;
+    if (!confirm(`Reject ${selectedResults.length} results?`)) return;
+
+    setIsBulkRejecting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const resultId of selectedResults) {
+      try {
+        const res = await fetch("/api/admin/results/reject", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resultId }),
+        });
+        if (res.ok) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    toast.success(`❌ Rejected ${successCount} results${failCount > 0 ? `, ${failCount} failed` : ''}`);
+    setSelectedResults([]);
+    setIsBulkRejecting(false);
+    refetch();
+    queryClient.invalidateQueries({ queryKey: ["admin-results-stats"] });
+  }, [selectedResults, refetch, queryClient]);
+
+  // ✅ Approve single result
+  const handleApprove = useCallback(async (resultId: string) => {
+    queryClient.setQueryData(["admin-results", filter, currentPage, searchTerm, dateRange, seasonFilter], (oldData: any) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        results: oldData.results?.filter((r: any) => r.id !== resultId) || [],
+        total: Math.max(0, oldData.total - 1),
+      };
+    });
+
+    queryClient.setQueryData(["admin-results-stats", filter, searchTerm, dateRange, seasonFilter], (oldStats: any) => {
+      if (!oldStats) return oldStats;
+      return {
+        ...oldStats,
+        pending: Math.max(0, oldStats.pending - 1),
+        total: Math.max(0, oldStats.total - 1),
+        approved: oldStats.approved + 1,
+        today: isToday(new Date().toISOString()) ? oldStats.today + 1 : oldStats.today,
+      };
+    });
+
     try {
       const res = await fetch("/api/admin/results/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resultId }),
       });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        toast.success("Result approved!");
-        fetchResults();
-      } else {
-        toast.error(data.error || "Failed to approve");
-      }
-    } catch (err) {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setApprovingId(null);
+      if (!res.ok) throw new Error("Failed to approve");
+      toast.success("✅ Result approved!");
+      setTimeout(() => {
+        refetch();
+        queryClient.invalidateQueries({ queryKey: ["admin-results-stats"] });
+      }, 1000);
+    } catch (error) {
+      toast.error("Failed to approve");
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["admin-results-stats"] });
     }
-  }, []);
+  }, [filter, currentPage, searchTerm, dateRange, seasonFilter, queryClient, refetch]);
 
-  const rejectResult = useCallback(async (resultId: string) => {
-    if (!confirm("Are you sure you want to reject this result?")) return;
+  // ✅ Reject single result
+  const handleReject = useCallback(async (resultId: string) => {
+    if (!confirm("Reject this result?")) return;
 
-    setRejectingId(resultId);
+    queryClient.setQueryData(["admin-results", filter, currentPage, searchTerm, dateRange, seasonFilter], (oldData: any) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        results: oldData.results?.filter((r: any) => r.id !== resultId) || [],
+        total: Math.max(0, oldData.total - 1),
+      };
+    });
+
+    queryClient.setQueryData(["admin-results-stats", filter, searchTerm, dateRange, seasonFilter], (oldStats: any) => {
+      if (!oldStats) return oldStats;
+      return {
+        ...oldStats,
+        pending: Math.max(0, oldStats.pending - 1),
+        total: Math.max(0, oldStats.total - 1),
+      };
+    });
+
     try {
       const res = await fetch("/api/admin/results/reject", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resultId }),
       });
-
-      if (res.ok) {
-        toast.success("Result rejected");
-        fetchResults();
-      } else {
-        toast.error("Failed to reject");
-      }
-    } catch (err) {
-      toast.error("Network error. Please try again.");
-    } finally {
-      setRejectingId(null);
+      if (!res.ok) throw new Error("Failed to reject");
+      toast.success("❌ Result rejected!");
+      setTimeout(() => {
+        refetch();
+        queryClient.invalidateQueries({ queryKey: ["admin-results-stats"] });
+      }, 1000);
+    } catch (error) {
+      toast.error("Failed to reject");
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["admin-results-stats"] });
     }
-  }, []);
+  }, [filter, currentPage, searchTerm, dateRange, seasonFilter, queryClient, refetch]);
 
-  const pendingResults = useMemo(() => results.filter((r) => !r.approved), [results]);
-  const approvedResults = useMemo(() => results.filter((r) => r.approved), [results]);
-  const todayResults = useMemo(() => results.filter((r) => isToday(r.createdAt)), [results]);
+  // ✅ Handle export
+  const handleExport = useCallback(async (format: 'csv' | 'pdf' | 'print') => {
+    try {
+      const params = new URLSearchParams();
+      params.append('filter', filter);
+      if (searchTerm) params.append('search', searchTerm);
+      if (dateRange.from) params.append('dateFrom', dateRange.from);
+      if (dateRange.to) params.append('dateTo', dateRange.to);
+      if (seasonFilter !== 'all') params.append('seasonId', seasonFilter);
+      params.append('format', format);
 
-  const displayResults = useMemo(() => {
-    const byStatus =
-      filter === "all" ? results : filter === "pending" ? pendingResults : approvedResults;
+      const res = await fetch(`/api/admin/results/export?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to export");
 
-    if (!searchTerm.trim()) return byStatus;
+      if (format === 'print') {
+        const data = await res.json();
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          printWindow.document.write(`
+            <html>
+              <head><title>Results Export</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 20px; background: white; color: black; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background: #f5f5f5; font-weight: bold; }
+                h1 { color: #333; }
+                .stats { display: flex; gap: 20px; margin: 20px 0; flex-wrap: wrap; }
+                .stat { background: #f5f5f5; padding: 10px 20px; border-radius: 8px; }
+              </style>
+              </head>
+              <body>
+                <h1>Results Report</h1>
+                <div class="stats">
+                  <div class="stat"><strong>Total:</strong> ${data.total || 0}</div>
+                  <div class="stat"><strong>Pending:</strong> ${data.pending || 0}</div>
+                  <div class="stat"><strong>Approved:</strong> ${data.approved || 0}</div>
+                </div>
+                <table>
+                  <thead><tr><th>ID</th><th>Home</th><th>Away</th><th>Score</th><th>Status</th><th>Date</th></tr></thead>
+                  <tbody>
+                    ${data.results?.map((r: any) => `
+                      <tr>
+                        <td>${r.id.slice(0, 8)}</td>
+                        <td>${playerName(r.fixture?.homePlayer || r.tournamentMatch?.homePlayer)}</td>
+                        <td>${playerName(r.fixture?.awayPlayer || r.tournamentMatch?.awayPlayer)}</td>
+                        <td>${r.homeScore}-${r.awayScore}</td>
+                        <td>${r.approved ? '✅ Approved' : '⏳ Pending'}</td>
+                        <td>${formatDate(r.createdAt)}</td>
+                      </tr>
+                    `).join('') || ''}
+                  </tbody>
+                </table>
+                <p style="margin-top: 20px; color: #666; font-size: 12px;">Exported on ${new Date().toLocaleString()}</p>
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+          printWindow.print();
+        }
+      } else {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `results-export.${format === 'csv' ? 'csv' : 'pdf'}`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        toast.success(`📊 Exported as ${format.toUpperCase()}`);
+      }
+    } catch (error) {
+      toast.error("Failed to export");
+    }
+  }, [filter, searchTerm, dateRange, seasonFilter]);
 
-    const query = searchTerm.toLowerCase();
-    return byStatus.filter((result) => {
-      const homeName = result.fixture
-        ? playerName(result.fixture.homePlayer)
-        : playerName(result.tournamentMatch?.homePlayer);
-      const awayName = result.fixture
-        ? playerName(result.fixture.awayPlayer)
-        : playerName(result.tournamentMatch?.awayPlayer);
-      const submitter = result.user?.profile?.username || result.user?.name || result.user?.email || "";
-      const tournament = result.tournamentMatch?.tournament?.name || "";
-      return [homeName, awayName, submitter, tournament, result.source]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    });
-  }, [approvedResults, filter, pendingResults, results, searchTerm]);
+  // ✅ Manual refresh
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: ["admin-results-stats"] }),
+      ]);
+      toast.success("🔄 Results refreshed!");
+    } catch (error) {
+      toast.error("Failed to refresh");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch, queryClient]);
 
+  // ✅ Stat cards
   const statCards = useMemo(() => [
     {
       label: "Pending",
-      value: pendingResults.length,
+      value: totalPending,
       hint: "Awaiting approval",
       icon: Clock,
       accent: "text-yellow-400",
@@ -509,7 +914,7 @@ export default function AdminResultsPage() {
     },
     {
       label: "Approved",
-      value: approvedResults.length,
+      value: totalApproved,
       hint: "Approved results",
       icon: CheckCircle,
       accent: "text-green-400",
@@ -518,7 +923,7 @@ export default function AdminResultsPage() {
     },
     {
       label: "Today",
-      value: todayResults.length,
+      value: totalToday,
       hint: "Submitted today",
       icon: Flame,
       accent: "text-orange-400",
@@ -527,26 +932,49 @@ export default function AdminResultsPage() {
     },
     {
       label: "Total",
-      value: results.length,
+      value: totalAll,
       hint: "Total submissions",
       icon: Trophy,
       accent: "text-indigo-400",
       ring: "border-indigo-500/20",
       glow: "from-indigo-500/20",
     },
-  ], [pendingResults, approvedResults, todayResults, results]);
+  ], [totalPending, totalApproved, totalToday, totalAll]);
 
   const filterButtons = useMemo(() => [
-    { value: "pending" as const, label: "Pending", icon: Clock, count: pendingResults.length, active: "bg-yellow-500/20 text-yellow-300" },
-    { value: "approved" as const, label: "Approved", icon: CheckCircle, count: approvedResults.length, active: "bg-green-500/20 text-green-300" },
-    { value: "all" as const, label: "All", icon: Filter, count: results.length, active: "bg-indigo-500/20 text-indigo-300" },
-  ], [pendingResults, approvedResults, results]);
+    { value: "pending" as const, label: "Pending", icon: Clock, count: totalPending, active: "bg-yellow-500/20 text-yellow-300" },
+    { value: "approved" as const, label: "Approved", icon: CheckCircle, count: totalApproved, active: "bg-green-500/20 text-green-300" },
+    { value: "all" as const, label: "All", icon: Filter, count: totalAll, active: "bg-indigo-500/20 text-indigo-300" },
+  ], [totalPending, totalApproved, totalAll]);
 
-  if (loading) {
+  const setFilterValue = useCallback((value: "pending" | "approved" | "all") => {
+    setFilter(value);
+    setCurrentPage(1);
+    setSelectedResults([]);
+  }, []);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+    setSelectedResults([]);
+  }, []);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    setSelectedResults([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleViewEvidence = useCallback((image: string) => {
+    setSelectedImage(image);
+  }, []);
+
+  // ✅ Show loading only on first load
+  if (isLoading && !resultsData) {
     return (
       <>
         <DecorBackground />
-        <div className="flex h-96 items-center justify-center">
+        <div className="flex h-96 items-center justify-center px-4">
           <div className="text-center">
             <div className="relative mx-auto mb-4 h-16 w-16">
               <div className="absolute inset-0 rounded-full border-4 border-orange-500/20" />
@@ -567,17 +995,9 @@ export default function AdminResultsPage() {
   return (
     <>
       <DecorBackground />
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-5 will-change-transform sm:space-y-6"
-      >
+      <div className="space-y-4 px-3 pb-20 sm:space-y-6 sm:px-4 lg:px-6">
         {/* Header */}
-        <motion.div
-          variants={itemVariants}
-          className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-orange-600/20 via-red-600/20 to-purple-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6"
-        >
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-orange-600/20 via-red-600/20 to-purple-600/20 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-orange-500/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -585,41 +1005,68 @@ export default function AdminResultsPage() {
                 <ShieldCheck className="h-5 w-5 text-white sm:h-6 sm:w-6" />
               </span>
               <div className="min-w-0">
-                <h1 className="truncate text-xl font-bold text-white sm:text-2xl">
+                <h1 className="truncate text-lg font-bold text-white sm:text-2xl">
                   📋 Result Management
                 </h1>
-                <p className="mt-0.5 text-xs text-gray-300 sm:text-sm">
+                <p className="mt-0.5 truncate text-xs text-gray-300 sm:text-sm">
                   Review and manage match result submissions
                 </p>
               </div>
             </div>
-            <span className="flex w-fit items-center gap-1.5 rounded-full border border-yellow-400/30 bg-yellow-500/10 px-3 py-1.5 text-xs font-semibold text-yellow-300">
-              <Sparkles className="h-3.5 w-3.5" />
-              {pendingResults.length} pending
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex w-fit items-center gap-1.5 rounded-full border border-yellow-400/30 bg-yellow-500/10 px-3 py-1.5 text-xs font-semibold text-yellow-300">
+                <Sparkles className="h-3.5 w-3.5" />
+                {totalPending} pending
+              </span>
+              <ExportDropdown onExport={handleExport} />
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-gray-800/60 px-3.5 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700/60"
+              >
+                <Filter size={16} />
+                <span className="hidden sm:inline">Filters</span>
+                {showAdvancedFilters ? <ChevronDownIcon size={14} className="rotate-180" /> : <ChevronDownIcon size={14} />}
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.08] px-3.5 py-2 text-xs font-semibold text-gray-200 shadow-lg backdrop-blur-md transition-all duration-150 hover:border-white/30 hover:bg-white/[0.14] hover:text-white disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+            </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Stats */}
-        <motion.div variants={containerVariants} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* Stats - Shows skeletons while loading */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {statCards.map((stat) => (
-            <StatCard key={stat.label} stat={stat} />
+            <StatCard key={stat.label} stat={stat} isLoading={statsLoading} />
           ))}
-        </motion.div>
+        </div>
+
+        {/* Advanced Filters */}
+        <AdvancedFilters
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          seasonFilter={seasonFilter}
+          setSeasonFilter={setSeasonFilter}
+          seasons={seasons}
+          showFilters={showAdvancedFilters}
+          onClose={() => setShowAdvancedFilters(false)}
+        />
 
         {/* Filter Bar */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl"
-        >
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
               <input
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 placeholder="Search player, submitter, tournament, or source..."
-                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-white placeholder-gray-500 transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-gray-900/50 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-500 transition-colors duration-150 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/30"
               />
             </div>
             <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-gray-900/40 p-1">
@@ -628,52 +1075,81 @@ export default function AdminResultsPage() {
                   key={button.value}
                   button={button}
                   filter={filter}
-                  setFilter={setFilter}
+                  setFilter={setFilterValue}
                 />
               ))}
             </div>
           </div>
-        </motion.div>
+        </div>
+
+        {/* Bulk Action Bar */}
+        {results.length > 0 && (
+          <BulkActionBar
+            selectedCount={selectedResults.length}
+            totalCount={results.length}
+            onSelectAll={selectAll}
+            onDeselectAll={deselectAll}
+            onApproveSelected={bulkApprove}
+            onRejectSelected={bulkReject}
+            isApproving={isBulkApproving}
+            isRejecting={isBulkRejecting}
+          />
+        )}
+
+        {/* Results Count */}
+        <div className="flex items-center justify-between text-sm text-gray-400">
+          <span>Showing {results.length} of {totalResults} results</span>
+          <span>Page {currentPage} of {totalPages}</span>
+        </div>
 
         {/* Results List */}
-        {displayResults.length === 0 ? (
-          <motion.div
-            variants={itemVariants}
-            className="rounded-2xl border border-white/10 bg-white/5 py-12 text-center shadow-2xl backdrop-blur-xl"
-          >
+        {results.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 py-12 text-center shadow-2xl backdrop-blur-xl">
             <CheckCircle className="mx-auto mb-4 h-16 w-16 text-gray-600" />
             <h3 className="mb-2 text-xl font-semibold text-white">No Results Found</h3>
-            <p className="px-4 text-gray-400">
-              {searchTerm
-                ? "No results match your search."
+            <p className="px-4 text-sm text-gray-400 sm:text-base">
+              {searchTerm || dateRange.from || dateRange.to || seasonFilter !== 'all'
+                ? "No results match your filters."
                 : filter === "pending"
-                ? "No pending results waiting for approval."
+                ? "All results have been approved! 🎉"
                 : filter === "approved"
                 ? "No approved results yet."
                 : "No result submissions yet."}
             </p>
-          </motion.div>
+          </div>
         ) : (
-          <motion.div variants={containerVariants} className="space-y-4">
-            {displayResults.map((result) => (
+          <div className="space-y-4">
+            {results.map((result: any) => (
               <ResultCard
                 key={result.id}
                 result={result}
-                onApprove={approveResult}
-                onReject={rejectResult}
-                onViewEvidence={setSelectedImage}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onViewEvidence={handleViewEvidence}
+                isSelected={selectedResults.includes(result.id)}
+                onToggleSelect={toggleSelection}
+                showCheckbox={filter !== 'approved'}
               />
             ))}
-          </motion.div>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-6">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          </div>
         )}
 
         {/* Evidence Modal */}
-        <AnimatePresence>
-          {selectedImage && (
-            <EvidenceModal image={selectedImage} onClose={() => setSelectedImage(null)} />
-          )}
-        </AnimatePresence>
-      </motion.div>
+        {selectedImage && (
+          <EvidenceModal image={selectedImage} onClose={() => setSelectedImage(null)} />
+        )}
+      </div>
     </>
   );
 }
