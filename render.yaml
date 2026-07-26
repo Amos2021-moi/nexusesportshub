@@ -25,7 +25,3 @@
         value: info
       - key: PORT
         value: 3001
-    disk:
-      name: sessions
-      mountPath: /opt/render/project/src/whatsapp-bot/sessions
-      sizeGB: 1
