@@ -152,7 +152,10 @@ router.register(pingCommand);
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      QRCode.generate(qr, { small: true }); console.log("Scan the QR code above to authenticate.");
+      console.log("\n📱 SCAN THIS QR CODE WITH WHATSAPP:\n");
+      QRCode.generate(qr, { small: true });
+      console.log("\n🔗 Or copy this link to view QR code:");
+      console.log(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qr)}\n`);
       logger.info("📱 QR code rendered — scan with WhatsApp to authenticate");
       if (connectionManager.state === ConnectionState.LOGGED_OUT) {
         logger.info("New QR received — re-authentication in progress");
