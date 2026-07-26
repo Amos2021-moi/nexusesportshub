@@ -25,3 +25,7 @@
         value: info
       - key: PORT
         value: 3001
+      - key: RENDER_EXTERNAL_URL
+        value: https://nexus-whatsapp-bot.onrender.com
+      - key: BOT_PUBLIC_URL
+        value: https://nexus-whatsapp-bot.onrender.com
