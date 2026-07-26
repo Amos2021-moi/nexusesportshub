@@ -1,4 +1,4 @@
-services:
+﻿services:
   - type: web
     name: nexus-whatsapp-bot
     runtime: node
@@ -17,12 +17,6 @@ services:
         value: 120363429411366095@g.us
       - key: ADMIN_JIDS
         value: ""
-      # NEXUS_API_URL is auto-detected:
-      # production -> https://nexusesportshub.vercel.app/api
-      # development -> http://localhost:3000/api
-      # Uncomment below to override:
-      # - key: NEXUS_API_URL
-      #   value: https://nexusesportshub.vercel.app/api
       - key: NEXUS_API_SECRET
         value: 4a2bfa6ef184b1c4c686fadcb407ef05ff9276a25045550b5aeaa4121f3c7144
       - key: WEBHOOK_SECRET
