@@ -4,6 +4,12 @@ import { getToken } from "next-auth/jwt"
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
 
+  // ✅ Skip middleware for WhatsApp bot integration routes
+  // These use their own internal auth (Bearer token) and must not be intercepted
+  if (path.startsWith("/api/integrations/whatsapp") || path.startsWith("/api/webhook/whatsapp")) {
+    return NextResponse.next()
+  }
+
   // ✅ Get the session token
   const token = await getToken({
     req: request,
@@ -68,6 +74,6 @@ export const config = {
     "/dashboard/:path*",
     "/api/admin/:path*",
     "/api/competition/:path*",
-    "/api/:path*", // ✅ Added to catch ALL API routes
+    "/api/:path*",
   ],
 }

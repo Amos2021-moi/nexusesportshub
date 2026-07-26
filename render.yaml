@@ -4,15 +4,27 @@ services:
     runtime: node
     plan: free
     rootDir: whatsapp-bot
-    buildCommand: npm run render-build
+    buildCommand: npm run build
     startCommand: npm start
     envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BOT_NAME
+        value: NexusBot
       - key: WHATSAPP_SESSION_DIR
         value: ./sessions
-      - key: WHATSAPP_GROUP_JID
+      - key: WHATSAPP_GROUP_JIDS
         value: 120363429411366095@g.us
-      - key: NEXUS_API_URL
-        value: https://nexus-esports-backup.vercel.app/api
+      - key: ADMIN_JIDS
+        value: ""
+      # NEXUS_API_URL is auto-detected:
+      # production -> https://nexusesportshub.vercel.app/api
+      # development -> http://localhost:3000/api
+      # Uncomment below to override:
+      # - key: NEXUS_API_URL
+      #   value: https://nexusesportshub.vercel.app/api
+      - key: NEXUS_API_SECRET
+        value: 4a2bfa6ef184b1c4c686fadcb407ef05ff9276a25045550b5aeaa4121f3c7144
       - key: WEBHOOK_SECRET
         value: XNyBPzdOi/+jKbv5GsnOqLacRx6Hq4O+dQsY2jbxACg=
       - key: LOG_LEVEL

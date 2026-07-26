@@ -40,7 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 project_files.txt
-.vercel
 
 # Environment files (keep secrets safe)
 .env
@@ -50,10 +49,8 @@ project_files.txt
 # Keep example file
 !.env.example
 
-.vercel
-.env*
-
 /backups
+
 # Next.js
 .next
 .next/dev
@@ -61,7 +58,6 @@ project_files.txt
 
 # Development
 *.local
-.DS_Store
 
 # Prisma
 prisma/*.db
@@ -69,11 +65,16 @@ prisma/*.sqlite
 
 # Backups
 backups/
-
-# Large packages
-node_modules/
-# Backup files
-backups/
 *.zip
 *.sqlite
-.vercel
+
+# WhatsApp bot session data (contains auth credentials)
+sessions/
+whatsapp-bot/sessions/
+
+# WhatsApp bot
+whatsapp-bot/node_modules/
+whatsapp-bot/dist/
+whatsapp-bot/.env
+whatsapp-bot/.env.local
+whatsapp-bot/.env.production

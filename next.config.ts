@@ -78,6 +78,17 @@ const nextConfig = {
     ],
   },
 
+  // ✅ FIX: Rewrite double /api/api/ paths to single /api/
+  // This handles the case where proxy.ts middleware double-encodes the path
+  async rewrites() {
+    return [
+      {
+        source: '/api/api/:path*',
+        destination: '/api/:path*',
+      },
+    ]
+  },
+
   // ✅ Add turbopack config (empty for now)
   turbopack: {},
 
